@@ -14,10 +14,7 @@ import Apecs
 import Control.Lens (makeLenses)
 import Data.Text (Text)
 import Linear.V2 (V2)
-import SDL.Video.Renderer (Renderer)
-import SG.Atlas (AtlasCache)
 import SG.Math (Radians)
-import SG.TextureCache (TextureCache)
 
 data Body =
   Body
@@ -102,14 +99,3 @@ makeWorld
 type System' a = System World a
 
 type Endo a = a -> a
-
-data LoopData =
-  LoopData
-    { _loopTextureCache :: TextureCache
-    , _loopAtlasCache :: AtlasCache
-    , _loopRenderer :: Renderer
-    , _loopDelta :: Double
-    , _loopWorld :: World
-    }
-
-makeLenses ''LoopData

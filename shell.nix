@@ -6,8 +6,8 @@ let
 
   f = { mkDerivation, aeson, apecs, base, bytestring, cabal-install
       , clock, containers, directory, filepath, hindent, hlint, lens
-      , lens-aeson, linear, sdl2, sdl2-image, sdl2-mixer, sdl2-ttf
-      , StateVar, stdenv, text
+      , lens-aeson, linear, MonadRandom, random, sdl2, sdl2-image
+      , sdl2-mixer, sdl2-ttf, StateVar, stdenv, text
       }:
       mkDerivation {
         pname = "hspacegame";
@@ -17,8 +17,8 @@ let
         isExecutable = true;
         executableHaskellDepends = [
           aeson apecs base bytestring clock containers directory filepath
-          lens lens-aeson linear sdl2 sdl2-image sdl2-mixer sdl2-ttf StateVar
-          text
+          lens lens-aeson linear MonadRandom random sdl2 sdl2-image
+          sdl2-mixer sdl2-ttf StateVar text
         ];
         executableToolDepends = [ cabal-install hindent hlint ];
         license = "unknown";

@@ -3,11 +3,15 @@
 module SG.Constants where
 
 import Linear.V2 (V2(V2))
+import SG.Math (Rectangle(Rectangle))
 import SG.Types (ImageIdentifier(..))
 import System.FilePath ((</>))
 
 gameSize :: V2 Int
 gameSize = V2 1024 768
+
+gameRect :: Rectangle Int
+gameRect = Rectangle (V2 0 0) gameSize
 
 playerSize :: V2 Int
 playerSize = V2 50 32

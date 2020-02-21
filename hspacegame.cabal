@@ -21,10 +21,13 @@ executable hspacegame
                      , SG.Constants
                      , SG.Math
                      , SG.TextureCache
+                     , SG.Starfield
                      , SG.Atlas
   build-depends:       base >=4.12 && <4.13
                      , lens
                      , text
+                     , random
+                     , MonadRandom
                      , bytestring
                      , directory
                      , filepath

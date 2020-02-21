@@ -1,11 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Main where
 
 import Apecs (cmapM_, global, modify, newEntity, runWith)
 import Control.Exception (bracket, bracket_)
 import Control.Lens
-  ( (&)
+  ( (%~)
+  , (&)
   , (.~)
   , (<.)
   , (^.)
@@ -19,6 +21,7 @@ import Control.Lens
   , from
   , ifolded
   , ix
+  , makeLenses
   , over
   , set
   , to
@@ -66,6 +69,7 @@ import SDL.Video.Renderer (clear, copyEx, destroyTexture, present)
 import SG.Atlas
 import SG.Constants
 import SG.Math
+import SG.Starfield
 import SG.TextureCache
 import SG.Types
 import System.Clock
@@ -75,7 +79,19 @@ import System.Clock
   , getTime
   , toNanoSecs
   )
-import System.FilePath.Lens (extension)
+import System.Random (mkStdGen)
+
+data LoopData =
+  LoopData
+    { _loopTextureCache :: TextureCache
+    , _loopAtlasCache :: AtlasCache
+    , _loopRenderer :: Renderer
+    , _loopDelta :: Double
+    , _loopWorld :: World
+    , _loopStarfield :: Starfield
+    }
+
+makeLenses ''LoopData
 
 windowConfig :: WindowConfig
 windowConfig =
@@ -141,15 +157,21 @@ mainLoop loopData = do
       let timeDiffSecs =
             fromIntegral (toNanoSecs (afterFrame `diffTimeSpec` beforeFrame)) /
             1000000000.0
-      mainLoop (loopData & loopDelta .~ timeDiffSecs)
+      mainLoop
+        (loopData & loopDelta .~ timeDiffSecs & loopStarfield %~
+         stepStarfield (loopData ^. loopDelta))
 
 draw :: LoopData -> System' ()
 draw loopData = do
   liftIO (clear (loopData ^. loopRenderer))
-  cmapM_ $ \(Body pos size angle velocity angularVelocity, Image (ImageIdentifier atlasPath atlasName)) -> do
+  cmapM_ $ \(Body pos size angle _ _, Image (ImageIdentifier atlasPath atlasName)) -> do
     foundAtlas <- loadAtlasCached (loopData ^. loopAtlasCache) atlasPath
-    let frames :: [Text]
-        frames = foundAtlas ^.. atlasFrames . ifolded . asIndex
+    drawStarfield
+      (loopData ^. loopRenderer)
+      (loopData ^. loopAtlasCache)
+      (loopData ^. loopStarfield)
+    -- let frames :: [Text]
+    --     frames = foundAtlas ^.. atlasFrames . ifolded . asIndex
     let atlasRect = foundAtlas ^?! atlasFrames . ix atlasName
     copyEx
       (loopData ^. loopRenderer)
@@ -166,10 +188,17 @@ main =
   bracket_ (initialize [InitVideo, InitAudio]) quit $
   bracket (createWindow "hspacegame" windowConfig) destroyWindow $ \window ->
     bracket (createRenderer window (-1) rendererConfig) destroyRenderer $ \renderer ->
-      bracket (initTextureCache renderer) destroyTextureCache $ \textureCache -> do
+      bracket (initTextureCache renderer) destroyTextureCache $ \textureCache ->
         bracket (initAtlasCache textureCache) destroyAtlasCache $ \atlasCache -> do
           rendererLogicalSize renderer $= Just (fromIntegral <$> gameSize)
           w <- initWorld
           runWith w $ do
             initEcs
-            mainLoop (LoopData textureCache atlasCache renderer 0 w)
+            mainLoop
+              (LoopData
+                 textureCache
+                 atlasCache
+                 renderer
+                 0
+                 w
+                 (initStarfield (mkStdGen 0)))
