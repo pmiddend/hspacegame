@@ -19,6 +19,9 @@ playerSize = V2 50 32
 basePath :: FilePath
 basePath = "data"
 
+backgroundMusicPath :: FilePath
+backgroundMusicPath = basePath </> "music.opus"
+
 imagePath :: FilePath
 imagePath = basePath </> "PNG"
 

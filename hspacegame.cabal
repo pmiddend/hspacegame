@@ -37,6 +37,7 @@ executable hspacegame
                      , sdl2-ttf
                      , sdl2-image
                      , sdl2-mixer
+                     , data-default-class
                      , StateVar
                      , apecs
                      , clock

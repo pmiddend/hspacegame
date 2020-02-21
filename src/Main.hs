@@ -1,43 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Main where
 
 import Apecs (cmapM_, global, modify, newEntity, runWith)
 import Control.Exception (bracket, bracket_)
-import Control.Lens
-  ( (%~)
-  , (&)
-  , (.~)
-  , (<.)
-  , (^.)
-  , (^..)
-  , (^?!)
-  , (^@..)
-  , _2
-  , asIndex
-  , at
-  , folded
-  , from
-  , ifolded
-  , ix
-  , makeLenses
-  , over
-  , set
-  , to
-  , toListOf
-  , view
-  )
+import Control.Lens ((%~), (&), (.~), (^.), (^?!), ix, makeLenses, to)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (Value)
-import Data.Aeson.Lens (_Integer, key, members)
-import Data.Foldable (fold, traverse_)
-import Data.IORef (IORef, modifyIORef, newIORef, readIORef)
-import Data.Map.Strict (Map)
+import Data.Default.Class (def)
+import Data.Foldable (fold)
 import Data.StateVar (($=))
-import Data.Text (Text, intercalate)
-import Data.Text.IO (putStrLn)
-import Data.Text.Lens (unpacked)
 import Linear.V2 (V2(V2))
 import Linear.Vector ((^/))
 import Prelude hiding (lookup, putStrLn)
@@ -48,14 +21,13 @@ import SDL.Event
   , eventPayload
   , pollEvents
   )
-import SDL.Image (loadTexture)
 import SDL.Init (InitFlag(InitAudio, InitVideo), initialize, quit)
 import SDL.Input.Keyboard (Keysym(Keysym))
 import qualified SDL.Input.Keyboard.Codes as KC
+import SDL.Mixer (pattern Forever, free, load, playMusic, withAudio)
 import SDL.Video
   ( Renderer
   , RendererConfig
-  , Texture
   , WindowConfig(windowInitialSize, windowResizable)
   , createRenderer
   , createWindow
@@ -65,7 +37,7 @@ import SDL.Video
   , destroyWindow
   , rendererLogicalSize
   )
-import SDL.Video.Renderer (clear, copyEx, destroyTexture, present)
+import SDL.Video.Renderer (clear, copyEx, present)
 import SG.Atlas
 import SG.Constants
 import SG.Math
@@ -164,14 +136,12 @@ mainLoop loopData = do
 draw :: LoopData -> System' ()
 draw loopData = do
   liftIO (clear (loopData ^. loopRenderer))
+  drawStarfield
+    (loopData ^. loopRenderer)
+    (loopData ^. loopAtlasCache)
+    (loopData ^. loopStarfield)
   cmapM_ $ \(Body pos size angle _ _, Image (ImageIdentifier atlasPath atlasName)) -> do
     foundAtlas <- loadAtlasCached (loopData ^. loopAtlasCache) atlasPath
-    drawStarfield
-      (loopData ^. loopRenderer)
-      (loopData ^. loopAtlasCache)
-      (loopData ^. loopStarfield)
-    -- let frames :: [Text]
-    --     frames = foundAtlas ^.. atlasFrames . ifolded . asIndex
     let atlasRect = foundAtlas ^?! atlasFrames . ix atlasName
     copyEx
       (loopData ^. loopRenderer)
@@ -183,22 +153,30 @@ draw loopData = do
       (V2 False False)
   liftIO (present (loopData ^. loopRenderer))
 
+withBackgroundMusic :: IO c -> IO c
+withBackgroundMusic x =
+  bracket
+    (load backgroundMusicPath)
+    free
+    (\music -> playMusic Forever music >> x)
+
 main :: IO ()
 main =
   bracket_ (initialize [InitVideo, InitAudio]) quit $
   bracket (createWindow "hspacegame" windowConfig) destroyWindow $ \window ->
     bracket (createRenderer window (-1) rendererConfig) destroyRenderer $ \renderer ->
       bracket (initTextureCache renderer) destroyTextureCache $ \textureCache ->
-        bracket (initAtlasCache textureCache) destroyAtlasCache $ \atlasCache -> do
-          rendererLogicalSize renderer $= Just (fromIntegral <$> gameSize)
-          w <- initWorld
-          runWith w $ do
-            initEcs
-            mainLoop
-              (LoopData
-                 textureCache
-                 atlasCache
-                 renderer
-                 0
-                 w
-                 (initStarfield (mkStdGen 0)))
+        bracket (initAtlasCache textureCache) destroyAtlasCache $ \atlasCache ->
+          withAudio def 1024 $ withBackgroundMusic $ do
+            rendererLogicalSize renderer $= Just (fromIntegral <$> gameSize)
+            w <- initWorld
+            runWith w $ do
+              initEcs
+              mainLoop
+                (LoopData
+                   textureCache
+                   atlasCache
+                   renderer
+                   0
+                   w
+                   (initStarfield (mkStdGen 0)))
