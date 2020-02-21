@@ -1,6 +1,7 @@
-{ mkDerivation, base, bytestring, cabal-install, containers
-, directory, filepath, hindent, hlint, lens, linear, sdl2
-, sdl2-image, sdl2-mixer, sdl2-ttf, StateVar, stdenv, text
+{ mkDerivation, aeson, apecs, base, bytestring, cabal-install
+, clock, containers, directory, filepath, hindent, hlint, lens
+, lens-aeson, linear, sdl2, sdl2-image, sdl2-mixer, sdl2-ttf
+, StateVar, stdenv, text
 }:
 mkDerivation {
   pname = "hspacegame";
@@ -9,8 +10,9 @@ mkDerivation {
   isLibrary = false;
   isExecutable = true;
   executableHaskellDepends = [
-    base bytestring containers directory filepath lens linear sdl2
-    sdl2-image sdl2-mixer sdl2-ttf StateVar text
+    aeson apecs base bytestring clock containers directory filepath
+    lens lens-aeson linear sdl2 sdl2-image sdl2-mixer sdl2-ttf StateVar
+    text
   ];
   executableToolDepends = [ cabal-install hindent hlint ];
   license = "unknown";

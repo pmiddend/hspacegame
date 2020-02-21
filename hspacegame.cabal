@@ -17,6 +17,11 @@ build-type:          Simple
 
 executable hspacegame
   main-is:             Main.hs
+  other-modules:       SG.Types
+                     , SG.Constants
+                     , SG.Math
+                     , SG.TextureCache
+                     , SG.Atlas
   build-depends:       base >=4.12 && <4.13
                      , lens
                      , text
@@ -30,8 +35,13 @@ executable hspacegame
                      , sdl2-image
                      , sdl2-mixer
                      , StateVar
+                     , apecs
+                     , clock
+                     , aeson
+                     , lens-aeson
   ghc-options: -threaded -Wall
   default-language:    Haskell2010
   build-tools:         hlint
                      , hindent
                      , cabal-install
+  hs-source-dirs: src
