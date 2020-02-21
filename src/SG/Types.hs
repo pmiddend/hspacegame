@@ -79,23 +79,21 @@ instance Monoid Score where
 instance Component Score where
   type Storage Score = Global Score
 
-newtype Time =
-  Time Double
-  deriving (Show, Num)
-
-instance Semigroup Time where
-  (<>) = (+)
-
-instance Monoid Time where
-  mempty = 0
-
-instance Component Time where
-  type Storage Time = Global Time
-
-makeWorld
-  "World"
-  [''Body, ''Player, ''Target, ''Bullet, ''Score, ''Time, ''Image]
+makeWorld "World" [''Body, ''Player, ''Target, ''Bullet, ''Score, ''Image]
 
 type System' a = System World a
 
 type Endo a = a -> a
+
+data PlayerKeys =
+  PlayerKeys
+    { _pkLeft :: Bool
+    , _pkRight :: Bool
+    , _pkUp :: Bool
+    , _pkDown :: Bool
+    }
+
+makeLenses ''PlayerKeys
+
+initialPlayerKeys :: PlayerKeys
+initialPlayerKeys = PlayerKeys False False False False
