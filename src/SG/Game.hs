@@ -313,7 +313,7 @@ gameMain =
     bracket (createRenderer window (-1) rendererConfig) destroyRenderer $ \renderer ->
       bracket (initTextureCache renderer) destroyTextureCache $ \textureCache ->
         bracket (initAtlasCache textureCache) destroyAtlasCache $ \atlasCache ->
-          withAudio def 1024 $ withBackgroundMusic $ do
+          withAudio def 1024 $ do
             rendererLogicalSize renderer $= Just (fromIntegral <$> gameSize)
             w <- initWorld
             runWith w $ do

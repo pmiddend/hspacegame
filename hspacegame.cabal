@@ -24,6 +24,7 @@ executable hspacegame
                      , SG.Starfield
                      , SG.Atlas
                      , SG.Game
+                     , SG.Cache
   build-depends:       base >=4.12 && <4.13
                      , lens
                      , text

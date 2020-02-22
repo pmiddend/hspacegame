@@ -3,28 +3,15 @@
 
 module SG.Atlas where
 
-import Control.Lens
-  ( (&)
-  , (.~)
-  , (<.)
-  , (^?!)
-  , (^@..)
-  , _2
-  , at
-  , makeLenses
-  , over
-  , set
-  , to
-  , view
-  )
+import Control.Lens ((&), (.~), (<.), (^?!), (^@..), makeLenses, to)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Aeson (Value)
 import Data.Aeson.Lens (_Integer, key, members)
-import Data.IORef (IORef, modifyIORef, newIORef, readIORef)
-import Data.Map.Strict (Map, fromList)
+ import Data.Map.Strict (Map, fromList)
 import Data.Text (Text)
 import Linear.V2 (V2(V2))
 import SDL.Video (Texture)
+import SG.Cache
 import SG.Math (Rectangle(Rectangle))
 import SG.TextureCache (TextureCache, loadTextureCached)
 import System.FilePath (FilePath)
@@ -48,8 +35,8 @@ loadJsonRect v =
         (V2 (loadInt "x") (loadInt "y"))
         (V2 (loadInt "w") (loadInt "h"))
 
-loadAtlas :: MonadIO m => FilePath -> TextureCache -> m Atlas
-loadAtlas fp cache = do
+loadAtlas :: TextureCache -> FilePath -> IO Atlas
+loadAtlas cache fp = do
   let jsonFile = fp & extension .~ ".json"
   frames <- loadAtlasFrames jsonFile
   liftIO (putStrLn ("loading atlas json " <> jsonFile))
@@ -63,22 +50,14 @@ loadAtlasFrames fp = do
     (fromList
        (contents ^@.. key "frames" . members <. key "frame" . to loadJsonRect))
 
-type AtlasCache = IORef (TextureCache, Map FilePath Atlas)
+type AtlasCache = Cache Atlas
 
-initAtlasCache :: TextureCache -> IO AtlasCache
-initAtlasCache cache = newIORef (cache, mempty)
+initAtlasCache :: MonadIO m => TextureCache -> m AtlasCache
+initAtlasCache textureCache =
+  initCache (loadAtlas textureCache) (const (pure ()))
 
-destroyAtlasCache :: AtlasCache -> IO ()
-destroyAtlasCache _ = pure ()
+destroyAtlasCache :: MonadIO m => AtlasCache -> m ()
+destroyAtlasCache = destroyCache
 
 loadAtlasCached :: MonadIO m => AtlasCache -> FilePath -> m Atlas
-loadAtlasCached cache fp = do
-  (textureCache, existingAtlas) <-
-    over _2 (view (at fp)) <$> liftIO (readIORef cache)
-  case existingAtlas of
-    Just atlas -> pure atlas
-    Nothing -> do
-      liftIO (putStrLn ("loading atlas from file " <> fp))
-      loadedAtlas <- loadAtlas fp textureCache
-      liftIO (modifyIORef cache (set (_2 . at fp) (Just loadedAtlas)))
-      pure loadedAtlas
+loadAtlasCached = loadCached
