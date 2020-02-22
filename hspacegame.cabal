@@ -25,6 +25,7 @@ executable hspacegame
                      , SG.Atlas
                      , SG.Game
                      , SG.Cache
+                     , SG.ChunkCache
   build-depends:       base >=4.12 && <4.13
                      , lens
                      , text
@@ -32,6 +33,7 @@ executable hspacegame
                      , MonadRandom
                      , bytestring
                      , directory
+                     , lifted-base
                      , filepath
                      , containers
                      , linear

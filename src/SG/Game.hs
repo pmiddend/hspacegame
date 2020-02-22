@@ -9,6 +9,7 @@ module SG.Game where
 
 import Apecs (cmap, cmapM, cmapM_, destroy, newEntity, runWith)
 import Control.Exception (bracket, bracket_)
+import Control.Exception.Lifted (catch)
 import Control.Lens
   ( (%~)
   , (&)
@@ -33,7 +34,7 @@ import Data.StateVar (($=))
 import Data.Time.Units (Microsecond, toMicroseconds)
 import Linear.V2 (V2(V2), _x, _y)
 import Linear.Vector ((*^), (^/))
-import Prelude hiding (lookup, putStrLn)
+import Prelude hiding (lookup)
 import SDL.Event
   ( EventPayload(KeyboardEvent, QuitEvent)
   , InputMotion(Pressed, Released)
@@ -41,10 +42,19 @@ import SDL.Event
   , eventPayload
   , pollEvents
   )
+import SDL.Exception (SDLException)
 import SDL.Init (InitFlag(InitAudio, InitVideo), initialize, quit)
 import SDL.Input.Keyboard (Keysym(Keysym))
 import qualified SDL.Input.Keyboard.Codes as KC
-import SDL.Mixer (pattern Forever, free, load, playMusic, withAudio)
+import SDL.Mixer
+  ( Chunk
+  , pattern Forever
+  , free
+  , load
+  , play
+  , playMusic
+  , withAudio
+  )
 import SDL.Video
   ( Renderer
   , RendererConfig
@@ -59,6 +69,7 @@ import SDL.Video
   )
 import SDL.Video.Renderer (clear, copyEx, present)
 import SG.Atlas
+import SG.ChunkCache
 import SG.Constants
 import SG.Math
 import SG.Starfield
@@ -72,6 +83,7 @@ data LoopData =
   LoopData
     { _loopTextureCache :: TextureCache
     , _loopAtlasCache :: AtlasCache
+    , _loopChunkCache :: ChunkCache
     , _loopRenderer :: Renderer
     , _loopDelta :: Double
     , _loopWorld :: World
@@ -218,10 +230,23 @@ initEcs = do
       , Image playerImage)
   return ()
 
+playCatchIO :: MonadIO m => Chunk -> m ()
+playCatchIO c =
+  liftIO
+    (play c `catch` \e ->
+       putStrLn ("play sound failed" <> show (e :: SDLException)))
+
+playChunk :: MonadIO m => ChunkCache -> FilePath -> m ()
+playChunk cache fp = do
+  c <- loadChunk cache fp
+  playCatchIO c
+
 maybeShoot :: LoopRef -> System' ()
 maybeShoot loopRef = do
-  LoopData {_loopSpacePressed = spacePressed, _loopLastShot = lastShot} <-
-    readLoopData loopRef
+  LoopData { _loopSpacePressed = spacePressed
+           , _loopLastShot = lastShot
+           , _loopChunkCache = chunkCache
+           } <- readLoopData loopRef
   now <- getNow
   if spacePressed == Pressed &&
      getAll
@@ -245,6 +270,7 @@ maybeShoot loopRef = do
                    }
                , Image laserImage)
            modifyLoopData loopRef (loopLastShot ?~ now)
+           playChunk chunkCache pewPath
     else pure ()
 
 mainLoop :: LoopRef -> System' ()
@@ -313,7 +339,7 @@ gameMain =
     bracket (createRenderer window (-1) rendererConfig) destroyRenderer $ \renderer ->
       bracket (initTextureCache renderer) destroyTextureCache $ \textureCache ->
         bracket (initAtlasCache textureCache) destroyAtlasCache $ \atlasCache ->
-          withAudio def 1024 $ do
+          withAudio def 1024 $ bracket initChunkCache destroyChunkCache $ \chunkCache -> do
             rendererLogicalSize renderer $= Just (fromIntegral <$> gameSize)
             w <- initWorld
             runWith w $ do
@@ -324,6 +350,7 @@ gameMain =
                   (LoopData
                      textureCache
                      atlasCache
+                     chunkCache
                      renderer
                      0
                      w

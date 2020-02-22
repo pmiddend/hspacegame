@@ -44,6 +44,9 @@ imagePath = basePath </> "PNG"
 mainAtlasPath :: FilePath
 mainAtlasPath = imagePath </> "main-atlas.png"
 
+pewPath :: FilePath
+pewPath = basePath </> "Bonus" </> "sfx_laser1.wav"
+
 playerImage :: ImageIdentifier
 playerImage = ImageIdentifier mainAtlasPath "playerShip1_blue.png"
 
