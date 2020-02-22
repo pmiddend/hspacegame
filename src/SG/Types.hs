@@ -29,6 +29,8 @@ data Body =
 instance Component Body where
   type Storage Body = Map Body
 
+makeLenses ''Body
+
 data ImageIdentifier =
   ImageIdentifier
     { _iiAtlasPath :: FilePath
@@ -85,15 +87,15 @@ type System' a = System World a
 
 type Endo a = a -> a
 
-data PlayerKeys =
-  PlayerKeys
-    { _pkLeft :: Bool
-    , _pkRight :: Bool
-    , _pkUp :: Bool
-    , _pkDown :: Bool
-    }
+-- data PlayerKeys =
+--   PlayerKeys
+--     { _pkLeft :: Bool
+--     , _pkRight :: Bool
+--     , _pkUp :: Bool
+--     , _pkDown :: Bool
+--     } deriving(Show)
 
-makeLenses ''PlayerKeys
+-- makeLenses ''PlayerKeys
 
-initialPlayerKeys :: PlayerKeys
-initialPlayerKeys = PlayerKeys False False False False
+-- initialPlayerKeys :: PlayerKeys
+-- initialPlayerKeys = PlayerKeys False False False False

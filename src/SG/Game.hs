@@ -1,18 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module SG.Game where
 
-import Apecs (cmapM_, global, modify, newEntity, runWith)
+import Debug.Trace(traceShowId)
+import Apecs (cmapM_, newEntity, runWith, cmap)
 import Control.Exception (bracket, bracket_)
-import Control.Lens ((%~), (&), (.~), (^.), (^?!), ix, makeLenses, to)
-import Control.Monad.IO.Class (liftIO)
+import Control.Lens ((%~), (&), (.~), (^.), (^?!), ix, makeLenses, to, Lens', (+~), view)
+import Control.Monad.IO.Class (liftIO, MonadIO)
 import Data.Default.Class (def)
 import Data.Foldable (fold)
 import Data.StateVar (($=))
-import Linear.V2 (V2(V2))
-import Linear.Vector ((^/))
+import Linear.V2 (V2(V2), _x, _y)
+import Linear.Vector ((^/), (*^))
 import Prelude hiding (lookup, putStrLn)
 import SDL.Event
   ( EventPayload(KeyboardEvent, QuitEvent)
@@ -52,6 +54,9 @@ import System.Clock
   , toNanoSecs
   )
 import System.Random (mkStdGen)
+import Data.IORef(IORef, newIORef, readIORef, modifyIORef)
+
+type PlayerKeys = V2 Int
 
 data LoopData =
   LoopData
@@ -65,6 +70,14 @@ data LoopData =
     }
 
 makeLenses ''LoopData
+
+type LoopRef = IORef LoopData
+
+readLoopData :: MonadIO m => LoopRef -> m LoopData
+readLoopData r = liftIO (readIORef r)
+
+modifyLoopData :: MonadIO m => LoopRef -> Endo LoopData -> m ()
+modifyLoopData r f = liftIO (modifyIORef r f)
 
 windowConfig :: WindowConfig
 windowConfig =
@@ -86,15 +99,46 @@ instance Semigroup FinishState where
 instance Monoid FinishState where
   mempty = NotFinished
 
-eventHandler :: EventPayload -> System' FinishState
-eventHandler QuitEvent = pure Finished
-eventHandler (KeyboardEvent (KeyboardEventData _ Pressed _ (Keysym _ KC.KeycodeEscape _))) =
+eventHandler :: LoopRef -> EventPayload -> System' FinishState
+eventHandler _ QuitEvent = pure Finished
+eventHandler _ (KeyboardEvent (KeyboardEventData _ Pressed _ (Keysym _ KC.KeycodeEscape _))) =
   pure Finished
-eventHandler _ = pure mempty
+eventHandler loopRef (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ KC.KeycodeA _))) = do
+  modifyLoopData loopRef (loopPlayerKeys . _x +~ (if keyState == Pressed then -1 else 1))
+  pure mempty
+eventHandler loopRef (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ KC.KeycodeD _))) = do
+  modifyLoopData loopRef (loopPlayerKeys . _x +~ (if keyState == Pressed then 1 else -1))
+  pure mempty
+eventHandler loopRef (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ KC.KeycodeW _))) = do
+  modifyLoopData loopRef (loopPlayerKeys . _y +~ (if keyState == Pressed then -1 else 1))
+  pure mempty
+eventHandler loopRef (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ KC.KeycodeS _))) = do
+  modifyLoopData loopRef (loopPlayerKeys . _y +~ (if keyState == Pressed then 1 else -1))
+  pure mempty
+eventHandler _ _ = pure mempty
+
+updatePlayerVelocity :: Double -> PlayerKeys -> Endo (V2 Double)
+updatePlayerVelocity timeDelta pk v =
+  let updatePlayerVelocity' getter getterInt = 
+        let cv = getter v
+            velocitySignum = getterInt pk
+            inverseSignum = (-1) * signum cv
+            playerFrictionPart = abs cv / getter playerMaxVelocity
+        in if velocitySignum /= 0
+        then fromIntegral velocitySignum * getter playerMaxVelocity
+        else if abs cv < 0.000001
+             then 0
+             else cv + inverseSignum * timeDelta * playerFrictionPart * getter playerFriction
+  in V2 (updatePlayerVelocity' (view _x) (view _x)) (updatePlayerVelocity' (view _y) (view _y))
+
+updateBodies :: LoopRef -> System' ()
+updateBodies loopRef = do
+  LoopData { _loopDelta = timeDelta } <- readLoopData loopRef
+  cmap $ \b@Body { } -> b & bodyPosition +~ timeDelta *^ (b ^. bodyVelocity)
 
 initEcs :: System' ()
 initEcs = do
-  playerEty <-
+  _ <-
     newEntity
       ( Player
       , Body
@@ -113,25 +157,33 @@ initEcs = do
 getMyTime :: IO TimeSpec
 getMyTime = getTime Monotonic
 
-mainLoop :: LoopData -> System' ()
-mainLoop loopData = do
+mainLoop :: LoopRef -> System' ()
+mainLoop loopRef = do
   beforeFrame <- liftIO getMyTime
   events <- liftIO pollEvents
-  eventResult <- fold <$> mapM eventHandler (eventPayload <$> events)
+  eventResult <- fold <$> mapM (eventHandler loopRef) (eventPayload <$> events)
   case eventResult of
     Finished -> pure ()
     NotFinished -> do
-      draw loopData
+      draw loopRef
+      updatePlayer loopRef
+      updateBodies loopRef
       afterFrame <- liftIO getMyTime
       let timeDiffSecs =
             fromIntegral (toNanoSecs (afterFrame `diffTimeSpec` beforeFrame)) /
             1000000000.0
-      mainLoop
-        (loopData & loopDelta .~ timeDiffSecs & loopStarfield %~
+      modifyLoopData loopRef (\loopData -> loopData & loopDelta .~ timeDiffSecs & loopStarfield %~
          stepStarfield (loopData ^. loopDelta))
+      mainLoop loopRef
 
-draw :: LoopData -> System' ()
-draw loopData = do
+updatePlayer :: LoopRef -> System' ()
+updatePlayer loopRef = do
+  LoopData { _loopDelta = timeDelta, _loopPlayerKeys = keys } <- readLoopData loopRef
+  cmap $ \(Player, b@Body { _bodyVelocity = v }) -> b { _bodyVelocity = updatePlayerVelocity timeDelta keys v }
+
+draw :: LoopRef -> System' ()
+draw loopRef = do
+  loopData <- readLoopData loopRef
   liftIO (clear (loopData ^. loopRenderer))
   drawStarfield
     (loopData ^. loopRenderer)
@@ -169,12 +221,13 @@ gameMain =
             w <- initWorld
             runWith w $ do
               initEcs
-              mainLoop
-                (LoopData
+              loopRef <- liftIO $ newIORef (LoopData
                    textureCache
                    atlasCache
                    renderer
                    0
                    w
                    (initStarfield (mkStdGen 0))
-                   initialPlayerKeys)
+                   (V2 0 0))
+              mainLoop loopRef
+                

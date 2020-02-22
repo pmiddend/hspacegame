@@ -10,6 +10,12 @@ import System.FilePath ((</>))
 gameSize :: V2 Int
 gameSize = V2 1024 768
 
+playerMaxVelocity :: V2 Double
+playerMaxVelocity = V2 200 200
+
+playerFriction :: V2 Double
+playerFriction = V2 300 300
+
 gameRect :: Rectangle Int
 gameRect = Rectangle (V2 0 0) gameSize
 
