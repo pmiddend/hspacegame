@@ -13,7 +13,7 @@ module SG.Types where
 import Apecs
 import Control.Lens (makeLenses)
 import Data.Text (Text)
-import Linear.V2 (V2)
+import Linear.V2 (V2(V2))
 import SG.Math (Radians)
 
 data Body =
@@ -87,15 +87,7 @@ type System' a = System World a
 
 type Endo a = a -> a
 
--- data PlayerKeys =
---   PlayerKeys
---     { _pkLeft :: Bool
---     , _pkRight :: Bool
---     , _pkUp :: Bool
---     , _pkDown :: Bool
---     } deriving(Show)
+type PlayerDirection = V2 Int
 
--- makeLenses ''PlayerKeys
-
--- initialPlayerKeys :: PlayerKeys
--- initialPlayerKeys = PlayerKeys False False False False
+initialPlayerDirection :: PlayerDirection
+initialPlayerDirection = V2 0 0

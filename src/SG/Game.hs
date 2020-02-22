@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -103,6 +104,7 @@ eventHandler :: LoopRef -> EventPayload -> System' FinishState
 eventHandler _ QuitEvent = pure Finished
 eventHandler _ (KeyboardEvent (KeyboardEventData _ Pressed _ (Keysym _ KC.KeycodeEscape _))) =
   pure Finished
+-- TODO repetitive
 eventHandler loopRef (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ KC.KeycodeA _))) = do
   modifyLoopData loopRef (loopPlayerKeys . _x +~ (if keyState == Pressed then -1 else 1))
   pure mempty
@@ -119,9 +121,10 @@ eventHandler _ _ = pure mempty
 
 updatePlayerVelocity :: Double -> PlayerKeys -> Endo (V2 Double)
 updatePlayerVelocity timeDelta pk v =
-  let updatePlayerVelocity' getter getterInt = 
+  let updatePlayerVelocity' :: (forall a . V2 a -> a) -> Double
+      updatePlayerVelocity' getter = 
         let cv = getter v
-            velocitySignum = getterInt pk
+            velocitySignum = getter pk
             inverseSignum = (-1) * signum cv
             playerFrictionPart = abs cv / getter playerMaxVelocity
         in if velocitySignum /= 0
@@ -129,7 +132,7 @@ updatePlayerVelocity timeDelta pk v =
         else if abs cv < 0.000001
              then 0
              else cv + inverseSignum * timeDelta * playerFrictionPart * getter playerFriction
-  in V2 (updatePlayerVelocity' (view _x) (view _x)) (updatePlayerVelocity' (view _y) (view _y))
+  in V2 (updatePlayerVelocity' (view _x)) (updatePlayerVelocity' (view _y))
 
 updateBodies :: LoopRef -> System' ()
 updateBodies loopRef = do
@@ -228,6 +231,6 @@ gameMain =
                    0
                    w
                    (initStarfield (mkStdGen 0))
-                   (V2 0 0))
+                   initialPlayerDirection)
               mainLoop loopRef
                 
