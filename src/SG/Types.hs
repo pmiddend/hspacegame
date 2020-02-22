@@ -11,10 +11,19 @@
 module SG.Types where
 
 import Apecs
-import Control.Lens (makeLenses)
+import Control.Lens (Lens', (&), (.~), (^.), lens, makeLenses, to)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
+import Data.Time.Units (TimeUnit, fromMicroseconds)
 import Linear.V2 (V2(V2))
-import SG.Math (Radians)
+import SG.Math
+import System.Clock
+  ( Clock(Monotonic)
+  , TimeSpec
+  , diffTimeSpec
+  , getTime
+  , toNanoSecs
+  )
 
 data Body =
   Body
@@ -30,6 +39,14 @@ instance Component Body where
   type Storage Body = Map Body
 
 makeLenses ''Body
+
+bodyRectangle :: Lens' Body (Rectangle Double)
+bodyRectangle =
+  lens
+    (\b -> Rectangle (b ^. bodyPosition) (b ^. bodySize . to (fromIntegral <$>)))
+    (\b r ->
+       b & (bodyPosition .~ (r ^. rectPos)) & bodySize .~
+       (round <$> (r ^. rectSize)))
 
 data ImageIdentifier =
   ImageIdentifier
@@ -68,20 +85,9 @@ data Player =
 instance Component Player where
   type Storage Player = Unique Player
 
-newtype Score =
-  Score Int
-  deriving (Show, Num)
+makeWorld "World" [''Body, ''Player, ''Target, ''Bullet, ''Image]
 
-instance Semigroup Score where
-  (<>) = (+)
-
-instance Monoid Score where
-  mempty = 0
-
-instance Component Score where
-  type Storage Score = Global Score
-
-makeWorld "World" [''Body, ''Player, ''Target, ''Bullet, ''Score, ''Image]
+type AllComponents = (Body, Player, Target, Bullet, Image)
 
 type System' a = System World a
 
@@ -91,3 +97,12 @@ type PlayerDirection = V2 Int
 
 initialPlayerDirection :: PlayerDirection
 initialPlayerDirection = V2 0 0
+
+type TimePoint = TimeSpec
+
+getNow :: MonadIO m => m TimePoint
+getNow = liftIO (getTime Monotonic)
+
+-- TODO: use "acts" to define algebras on time points and durations
+timeDiff :: TimeUnit a => TimePoint -> TimePoint -> a
+timeDiff a b = fromMicroseconds (toNanoSecs (a `diffTimeSpec` b) `div` 1000)

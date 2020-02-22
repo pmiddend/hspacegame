@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
@@ -6,20 +7,36 @@
 
 module SG.Game where
 
-import Debug.Trace(traceShowId)
-import Apecs (cmapM_, newEntity, runWith, cmap)
+import Apecs (cmap, cmapM, cmapM_, destroy, newEntity, runWith)
 import Control.Exception (bracket, bracket_)
-import Control.Lens ((%~), (&), (.~), (^.), (^?!), ix, makeLenses, to, Lens', (+~), view)
-import Control.Monad.IO.Class (liftIO, MonadIO)
+import Control.Lens
+  ( (%~)
+  , (&)
+  , (+~)
+  , (.~)
+  , (?~)
+  , (^.)
+  , (^?!)
+  , ix
+  , makeLenses
+  , to
+  , view
+  )
+import Control.Monad (unless, void)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Default.Class (def)
-import Data.Foldable (fold)
+import Data.Foldable (fold, for_)
+import Data.IORef (IORef, modifyIORef, newIORef, readIORef)
+import Data.Monoid (All(All), getAll)
+import Data.Proxy
 import Data.StateVar (($=))
+import Data.Time.Units (Microsecond, toMicroseconds)
 import Linear.V2 (V2(V2), _x, _y)
-import Linear.Vector ((^/), (*^))
+import Linear.Vector ((*^), (^/))
 import Prelude hiding (lookup, putStrLn)
 import SDL.Event
   ( EventPayload(KeyboardEvent, QuitEvent)
-  , InputMotion(Pressed)
+  , InputMotion(Pressed, Released)
   , KeyboardEventData(KeyboardEventData)
   , eventPayload
   , pollEvents
@@ -47,15 +64,7 @@ import SG.Math
 import SG.Starfield
 import SG.TextureCache
 import SG.Types
-import System.Clock
-  ( Clock(Monotonic)
-  , TimeSpec
-  , diffTimeSpec
-  , getTime
-  , toNanoSecs
-  )
 import System.Random (mkStdGen)
-import Data.IORef(IORef, newIORef, readIORef, modifyIORef)
 
 type PlayerKeys = V2 Int
 
@@ -68,6 +77,8 @@ data LoopData =
     , _loopWorld :: World
     , _loopStarfield :: Starfield
     , _loopPlayerKeys :: PlayerKeys
+    , _loopSpacePressed :: InputMotion
+    , _loopLastShot :: Maybe TimePoint
     }
 
 makeLenses ''LoopData
@@ -100,44 +111,94 @@ instance Semigroup FinishState where
 instance Monoid FinishState where
   mempty = NotFinished
 
+keyCodeToPlayerDirection :: Num a => InputMotion -> KC.Keycode -> Maybe (V2 a)
+keyCodeToPlayerDirection c KC.KeycodeA =
+  Just $
+  V2
+    (if c == Pressed
+       then -1
+       else 1)
+    0
+keyCodeToPlayerDirection c KC.KeycodeD =
+  Just $
+  V2
+    (if c == Pressed
+       then 1
+       else -1)
+    0
+keyCodeToPlayerDirection c KC.KeycodeW =
+  Just $
+  V2
+    0
+    (if c == Pressed
+       then -1
+       else 1)
+keyCodeToPlayerDirection c KC.KeycodeS =
+  Just $
+  V2
+    0
+    (if c == Pressed
+       then 1
+       else -1)
+keyCodeToPlayerDirection _ _ = Nothing
+
+continue :: (Monad m, Monoid b) => m a -> m b
+continue x = x >> pure mempty
+
+resetIf :: Bool -> Maybe a -> Maybe a
+resetIf True _ = Nothing
+resetIf _ x = x
+
 eventHandler :: LoopRef -> EventPayload -> System' FinishState
 eventHandler _ QuitEvent = pure Finished
 eventHandler _ (KeyboardEvent (KeyboardEventData _ Pressed _ (Keysym _ KC.KeycodeEscape _))) =
   pure Finished
--- TODO repetitive
-eventHandler loopRef (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ KC.KeycodeA _))) = do
-  modifyLoopData loopRef (loopPlayerKeys . _x +~ (if keyState == Pressed then -1 else 1))
-  pure mempty
-eventHandler loopRef (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ KC.KeycodeD _))) = do
-  modifyLoopData loopRef (loopPlayerKeys . _x +~ (if keyState == Pressed then 1 else -1))
-  pure mempty
-eventHandler loopRef (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ KC.KeycodeW _))) = do
-  modifyLoopData loopRef (loopPlayerKeys . _y +~ (if keyState == Pressed then -1 else 1))
-  pure mempty
-eventHandler loopRef (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ KC.KeycodeS _))) = do
-  modifyLoopData loopRef (loopPlayerKeys . _y +~ (if keyState == Pressed then 1 else -1))
-  pure mempty
-eventHandler _ _ = pure mempty
+eventHandler loopRef (KeyboardEvent (KeyboardEventData _ spaceStatus _ (Keysym _ KC.KeycodeSpace _))) =
+  continue $
+  modifyLoopData
+    loopRef
+    (\ld ->
+       ld & loopSpacePressed .~ spaceStatus & loopLastShot %~
+       resetIf (spaceStatus == Pressed))
+eventHandler loopRef (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ kc _))) =
+  continue $
+  for_
+    (keyCodeToPlayerDirection keyState kc)
+    (modifyLoopData loopRef . (loopPlayerKeys +~))
+eventHandler _ _ = continue (pure ())
+
+class Applicator a where
+  applicate :: ((forall c. a c -> c) -> b -> b) -> a b -> a b
+
+instance Applicator V2 where
+  applicate f (V2 x y) = V2 (f (view _x) x) (f (view _y) y)
 
 updatePlayerVelocity :: Double -> PlayerKeys -> Endo (V2 Double)
 updatePlayerVelocity timeDelta pk v =
-  let updatePlayerVelocity' :: (forall a . V2 a -> a) -> Double
-      updatePlayerVelocity' getter = 
-        let cv = getter v
-            velocitySignum = getter pk
+  let updatePlayerVelocity' :: (forall a. V2 a -> a) -> Double -> Double
+      updatePlayerVelocity' getter cv =
+        let velocitySignum = getter pk
             inverseSignum = (-1) * signum cv
             playerFrictionPart = abs cv / getter playerMaxVelocity
-        in if velocitySignum /= 0
-        then fromIntegral velocitySignum * getter playerMaxVelocity
-        else if abs cv < 0.000001
-             then 0
-             else cv + inverseSignum * timeDelta * playerFrictionPart * getter playerFriction
-  in V2 (updatePlayerVelocity' (view _x)) (updatePlayerVelocity' (view _y))
+         in if velocitySignum /= 0
+              then fromIntegral velocitySignum * getter playerMaxVelocity
+              else if abs cv < 0.000001
+                     then 0
+                     else cv + inverseSignum * timeDelta * playerFrictionPart *
+                          getter playerFriction
+   in applicate updatePlayerVelocity' v
+
+inBounds :: Body -> Bool
+inBounds b =
+  let largerRect = rectEmbiggen 1.5 (fromIntegral <$> gameRect)
+   in rectIntersect largerRect (b ^. bodyRectangle)
 
 updateBodies :: LoopRef -> System' ()
 updateBodies loopRef = do
-  LoopData { _loopDelta = timeDelta } <- readLoopData loopRef
-  cmap $ \b@Body { } -> b & bodyPosition +~ timeDelta *^ (b ^. bodyVelocity)
+  LoopData {_loopDelta = timeDelta} <- readLoopData loopRef
+  cmapM $ \(b@Body {}, ety) -> do
+    unless (inBounds b) (destroy ety (Proxy @AllComponents))
+    pure (b & bodyPosition +~ timeDelta *^ (b ^. bodyVelocity))
 
 initEcs :: System' ()
 initEcs = do
@@ -157,12 +218,38 @@ initEcs = do
       , Image playerImage)
   return ()
 
-getMyTime :: IO TimeSpec
-getMyTime = getTime Monotonic
+maybeShoot :: LoopRef -> System' ()
+maybeShoot loopRef = do
+  LoopData {_loopSpacePressed = spacePressed, _loopLastShot = lastShot} <-
+    readLoopData loopRef
+  now <- getNow
+  if spacePressed == Pressed &&
+     getAll
+       (foldMap (All . (> playerShootingFrequency) . (now `timeDiff`)) lastShot)
+    then cmapM_ $ \(Player, Body { _bodyPosition = playerPos
+                                 , _bodySize = playerSize'
+                                 }) -> do
+           void $
+             newEntity
+               ( Bullet
+               , Body
+                   { _bodyPosition =
+                       V2
+                         (playerPos ^. _x + fromIntegral (playerSize' ^. _x) /
+                          2.0)
+                         (playerPos ^. _y)
+                   , _bodySize = laserSize
+                   , _bodyAngle = Radians 0
+                   , _bodyVelocity = laserSpeed
+                   , _bodyAngularVelocity = Radians 0
+                   }
+               , Image laserImage)
+           modifyLoopData loopRef (loopLastShot ?~ now)
+    else pure ()
 
 mainLoop :: LoopRef -> System' ()
 mainLoop loopRef = do
-  beforeFrame <- liftIO getMyTime
+  beforeFrame <- getNow
   events <- liftIO pollEvents
   eventResult <- fold <$> mapM (eventHandler loopRef) (eventPayload <$> events)
   case eventResult of
@@ -171,18 +258,25 @@ mainLoop loopRef = do
       draw loopRef
       updatePlayer loopRef
       updateBodies loopRef
-      afterFrame <- liftIO getMyTime
+      maybeShoot loopRef
+      afterFrame <- getNow
       let timeDiffSecs =
-            fromIntegral (toNanoSecs (afterFrame `diffTimeSpec` beforeFrame)) /
-            1000000000.0
-      modifyLoopData loopRef (\loopData -> loopData & loopDelta .~ timeDiffSecs & loopStarfield %~
-         stepStarfield (loopData ^. loopDelta))
+            fromIntegral
+              (toMicroseconds (afterFrame `timeDiff` beforeFrame :: Microsecond)) /
+            1000000.0
+      modifyLoopData
+        loopRef
+        (\loopData ->
+           loopData & loopDelta .~ timeDiffSecs & loopStarfield %~
+           stepStarfield (loopData ^. loopDelta))
       mainLoop loopRef
 
 updatePlayer :: LoopRef -> System' ()
 updatePlayer loopRef = do
-  LoopData { _loopDelta = timeDelta, _loopPlayerKeys = keys } <- readLoopData loopRef
-  cmap $ \(Player, b@Body { _bodyVelocity = v }) -> b { _bodyVelocity = updatePlayerVelocity timeDelta keys v }
+  LoopData {_loopDelta = timeDelta, _loopPlayerKeys = keys} <-
+    readLoopData loopRef
+  cmap $ \(Player, b@Body {_bodyVelocity = v}) ->
+    b {_bodyVelocity = updatePlayerVelocity timeDelta keys v}
 
 draw :: LoopRef -> System' ()
 draw loopRef = do
@@ -224,13 +318,17 @@ gameMain =
             w <- initWorld
             runWith w $ do
               initEcs
-              loopRef <- liftIO $ newIORef (LoopData
-                   textureCache
-                   atlasCache
-                   renderer
-                   0
-                   w
-                   (initStarfield (mkStdGen 0))
-                   initialPlayerDirection)
+              loopRef <-
+                liftIO $
+                newIORef
+                  (LoopData
+                     textureCache
+                     atlasCache
+                     renderer
+                     0
+                     w
+                     (initStarfield (mkStdGen 0))
+                     initialPlayerDirection
+                     Released
+                     Nothing)
               mainLoop loopRef
-                

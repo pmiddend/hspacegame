@@ -3,8 +3,9 @@
 
 module SG.Math where
 
-import Control.Lens (Iso', Lens', (^.), iso, makeLenses, set)
+import Control.Lens (Iso', Lens', (^.), iso, lens, makeLenses, set)
 import Linear.V2 (V2(V2), _x, _y)
+import Linear.Vector ((*^), (^/))
 import SDL.Vect (Point(P))
 import qualified SDL.Video.Renderer as SDL
 
@@ -16,6 +17,15 @@ data Rectangle a =
   deriving (Eq, Show, Functor)
 
 makeLenses ''Rectangle
+
+rectFromCenter :: Fractional a => V2 a -> V2 a -> Rectangle a
+rectFromCenter center size = Rectangle (center - size ^/ 2) size
+
+rectCenter :: Fractional a => Lens' (Rectangle a) (V2 a)
+rectCenter =
+  lens
+    (\r -> (r ^. rectPos) + (r ^. rectSize) / 2)
+    (\r c -> rectFromCenter c (r ^. rectSize))
 
 rectLeft :: Lens' (Rectangle a) a
 rectLeft = rectPos . _x
@@ -69,3 +79,6 @@ rectIntersect outer inner =
       h1 = outer ^. rectH
       h2 = inner ^. rectH
    in not (x1 + w1 < x2 || x2 + w2 < x1 || y1 + h1 < y2 || y2 + h2 < y1)
+
+rectEmbiggen :: Fractional a => a -> Rectangle a -> Rectangle a
+rectEmbiggen f r = rectFromCenter (r ^. rectCenter) (f *^ (r ^. rectSize))

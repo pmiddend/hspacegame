@@ -5,9 +5,10 @@ let
   inherit (nixpkgs) pkgs;
 
   f = { mkDerivation, aeson, apecs, base, bytestring, cabal-install
-      , clock, containers, directory, filepath, hindent, hlint, lens
-      , lens-aeson, linear, MonadRandom, random, sdl2, sdl2-image
-      , sdl2-mixer, sdl2-ttf, StateVar, stdenv, text
+      , clock, containers, data-default-class, directory, filepath
+      , hindent, hlint, lens, lens-aeson, linear, MonadRandom, random
+      , sdl2, sdl2-image, sdl2-mixer, sdl2-ttf, StateVar, stdenv, text
+      , time-units
       }:
       mkDerivation {
         pname = "hspacegame";
@@ -16,9 +17,9 @@ let
         isLibrary = false;
         isExecutable = true;
         executableHaskellDepends = [
-          aeson apecs base bytestring clock containers directory filepath
-          lens lens-aeson linear MonadRandom random sdl2 sdl2-image
-          sdl2-mixer sdl2-ttf StateVar text
+          aeson apecs base bytestring clock containers data-default-class
+          directory filepath lens lens-aeson linear MonadRandom random sdl2
+          sdl2-image sdl2-mixer sdl2-ttf StateVar text time-units
         ];
         executableToolDepends = [ cabal-install hindent hlint ];
         license = "unknown";
