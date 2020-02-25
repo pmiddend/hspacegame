@@ -26,6 +26,9 @@ gameRect = Rectangle (V2 0 0) gameSize
 playerSize :: V2 Int
 playerSize = V2 50 32
 
+asteroidMediumSize :: V2 Int
+asteroidMediumSize = V2 42 42
+
 laserSize :: V2 Int
 laserSize = V2 4 26
 

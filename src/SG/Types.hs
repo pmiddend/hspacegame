@@ -14,7 +14,7 @@ import Apecs
 import Control.Lens (Lens', (&), (.~), (^.), lens, makeLenses, to)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
-import Data.Time.Units (TimeUnit, fromMicroseconds)
+import Data.Time.Units (Millisecond, TimeUnit, fromMicroseconds)
 import Linear.V2 (V2(V2))
 import SG.Math
 import System.Clock
@@ -106,3 +106,17 @@ getNow = liftIO (getTime Monotonic)
 -- TODO: use "acts" to define algebras on time points and durations
 timeDiff :: TimeUnit a => TimePoint -> TimePoint -> a
 timeDiff a b = fromMicroseconds (toNanoSecs (a `diffTimeSpec` b) `div` 1000)
+
+data SpawnType =
+  SpawnTypeAsteroidMedium
+
+data Spawn =
+  Spawn
+    { _spawnTimeDiff :: Millisecond
+    , _spawnType :: SpawnType
+    , _spawnPosition :: V2 Double
+    }
+
+makeLenses ''Spawn
+
+type Level = [Spawn]

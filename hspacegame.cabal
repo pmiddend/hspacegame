@@ -33,6 +33,8 @@ executable hspacegame
                      , MonadRandom
                      , bytestring
                      , directory
+                     , mtl
+                     , transformers
                      , lifted-base
                      , filepath
                      , containers
@@ -48,7 +50,7 @@ executable hspacegame
                      , aeson
                      , lens-aeson
                      , time-units
-  ghc-options: -threaded -Wall
+  ghc-options: -threaded -Wall -Wno-orphans
   default-language:    Haskell2010
   build-tools:         hlint
                      , hindent
