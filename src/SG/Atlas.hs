@@ -10,10 +10,9 @@ import Data.Aeson.Lens (_Integer, key, members)
 import Data.Map.Strict (Map, fromList)
 import Data.Text (Text)
 import Linear.V2 (V2(V2))
-import SDL.Video (Texture)
 import SG.Cache
 import SG.Math (Rectangle(Rectangle))
-import SG.TextureCache (TextureCache, loadTextureCached)
+import SG.TextureCache (SizedTexture, TextureCache, loadTextureCached)
 import System.FilePath (FilePath)
 import System.FilePath.Lens (extension)
 
@@ -22,7 +21,7 @@ type AtlasFrame = Rectangle Int
 data Atlas =
   Atlas
     { _atlasFrames :: Map Text AtlasFrame
-    , _atlasTexture :: Texture
+    , _atlasTexture :: SizedTexture
     }
 
 makeLenses ''Atlas

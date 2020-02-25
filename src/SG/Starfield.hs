@@ -17,6 +17,7 @@ import SDL.Video.Renderer (copyEx)
 import SG.Atlas
 import SG.Constants
 import SG.Math
+import SG.TextureCache
 import SG.Types (Endo)
 import System.Random (StdGen)
 
@@ -94,7 +95,7 @@ drawStarfield renderer cache field = do
     forM_ (layer ^. starLayerPositions) $ \pos ->
       copyEx
         renderer
-        (foundAtlas ^. atlasTexture)
+        (foundAtlas ^. atlasTexture . stTexture)
         (Just
            (foundAtlas ^?! atlasFrames . ix "star.png" . to (fromIntegral <$>) .
             sdlRect))

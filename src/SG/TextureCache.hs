@@ -1,18 +1,48 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module SG.TextureCache where
 
-import Control.Monad.IO.Class (MonadIO)
+import Control.Lens (makeLenses, view)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Linear.V2 (V2(V2))
 import SDL.Image (loadTexture)
 import SDL.Video (Renderer, Texture)
-import SDL.Video.Renderer (destroyTexture)
+import SDL.Video.Renderer
+  ( destroyTexture
+  , queryTexture
+  , textureHeight
+  , textureWidth
+  )
 import SG.Cache
 
-type TextureCache = Cache Texture
+data SizedTexture =
+  SizedTexture
+    { _stTexture :: Texture
+    , _stSize :: V2 Int
+    }
+
+makeLenses ''SizedTexture
+
+type TextureCache = Cache SizedTexture
+
+loadSizedTexture :: MonadIO m => Renderer -> FilePath -> m SizedTexture
+loadSizedTexture renderer fp = do
+  t <- liftIO (loadTexture renderer fp)
+  ti <- liftIO (queryTexture t)
+  pure
+    (SizedTexture
+       t
+       (V2 (fromIntegral (textureWidth ti)) (fromIntegral (textureHeight ti))))
+
+destroySizedTexture :: MonadIO m => SizedTexture -> m ()
+destroySizedTexture = destroyTexture . view stTexture
 
 initTextureCache :: MonadIO m => Renderer -> m TextureCache
-initTextureCache renderer = initCache (loadTexture renderer) destroyTexture
+initTextureCache renderer =
+  initCache (loadSizedTexture renderer) destroySizedTexture
 
 destroyTextureCache :: MonadIO m => TextureCache -> m ()
 destroyTextureCache = destroyCache
 
-loadTextureCached :: MonadIO m => TextureCache -> FilePath -> m Texture
+loadTextureCached :: MonadIO m => TextureCache -> FilePath -> m SizedTexture
 loadTextureCached = loadCached

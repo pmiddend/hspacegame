@@ -11,7 +11,17 @@
 
 module SG.Game where
 
-import Apecs (SystemT, cmap, cmapM, cmapM_, destroy, newEntity, runWith, set)
+import Apecs
+  ( Set
+  , SystemT
+  , cmap
+  , cmapM
+  , cmapM_
+  , destroy
+  , newEntity
+  , runWith
+  , set
+  )
 import Control.Arrow ((***))
 import Control.Exception (bracket, bracket_)
 import Control.Exception.Lifted (catch)
@@ -42,6 +52,7 @@ import Data.Foldable (fold, for_)
 import Data.Monoid (All(All), getAll)
 import Data.Proxy
 import Data.StateVar (($=))
+import Data.Text (pack)
 import Data.Time.Units
   ( Microsecond
   , Millisecond
@@ -73,6 +84,7 @@ import SDL.Mixer
   , playMusic
   , withAudio
   )
+import SDL.Video (Texture)
 import SDL.Video
   ( Renderer
   , RendererConfig
@@ -230,10 +242,12 @@ updateBodies = do
       (b & bodyData . bodyPosition +~ timeDelta *^
        (b ^. bodyData . bodyVelocity))
 
+newEntity' :: (Set World LoopState c) => c -> GameSystem ()
+newEntity' xs = void $ newEntity xs
+
 initEcs :: GameSystem ()
 initEcs =
-  void $
-  newEntity
+  newEntity'
     ( Player
     , Body $
       BodyData
@@ -303,8 +317,7 @@ a ^! b = view b <$> a
 
 spawn :: Spawn -> GameSystem ()
 spawn s =
-  void $
-  newEntity
+  newEntity'
     ( Target asteroidMediumRadius asteroidMediumHealth
     , Body $
       BodyData
@@ -331,10 +344,12 @@ spawnEnemies = do
       uncurry (>>) . (mapM_ spawn *** pure) .
       span ((< convertUnit elapsed) . view spawnTimeDiff)
 
+destroyEntity ety = destroy ety (Proxy @AllComponents)
+
 handleCollisions :: GameSystem ()
 handleCollisions =
   cmapM_ $ \(Target tr th, Body bdT, etyT) ->
-    cmapM_ $ \(Bullet br bd, Body bdB, etyB) -> do
+    cmapM_ $ \(Bullet br bd, Body bdB, etyB) ->
       when
         (circlesIntersect
            (Circle (bdT ^. bodyCenter) tr)
@@ -344,9 +359,28 @@ handleCollisions =
         if newHealth <= 0
           then do
             destroy etyT (Proxy @AllComponents)
+            now <- getNow
+            newEntity'
+              ( Animation explosionAnimation now
+              , Lifetime (now `addTime` (explosionAnimation ^. aiTotalDuration))
+              , Body $
+                BodyData
+                  { _bodyPosition =
+                      bdT ^. bodyCenter - (fromIntegral <$> explosionSize) ^/
+                      2.0
+                  , _bodySize = explosionSize
+                  , _bodyAngle = Radians 0
+                  , _bodyVelocity = V2 0 0
+                  , _bodyAngularVelocity = Radians 0
+                  })
             playChunk explosionSoundPath
             loopScore += 1
           else set etyT (Target tr newHealth)
+
+deleteRetirees :: GameSystem ()
+deleteRetirees = do
+  now <- getNow
+  cmapM_ $ \(Lifetime ltEnd, ety) -> when (now > ltEnd) (destroyEntity ety)
 
 mainLoop :: GameSystem ()
 mainLoop = do
@@ -358,6 +392,7 @@ mainLoop = do
     NotFinished -> do
       draw
       updatePlayer
+      deleteRetirees
       updateBodies
       spawnEnemies
       maybeShoot
@@ -379,28 +414,58 @@ updatePlayer = do
   cmap $ \(Player, Body b) ->
     Body (b & bodyVelocity %~ updatePlayerVelocity timeDelta keys)
 
+determineAnimFrame :: TimePoint -> Animation -> Int
+determineAnimFrame now anim =
+  let elapsed :: Microsecond
+      elapsed = now `timeDiff` (anim ^. animationStart)
+      duration :: Millisecond
+      duration = anim ^. animationIdentifier . aiFrameDuration
+      frameCount = anim ^. animationIdentifier . aiFrameCount
+   in fromIntegral (toMicroseconds elapsed `div` toMicroseconds duration) `mod`
+      frameCount
+
+determineAnimRect :: Int -> Animation -> SizedTexture -> Rectangle Int
+determineAnimRect frame anim texture =
+  let frameSize = anim ^. animationIdentifier . aiFrameSize
+      perRow = (texture ^. stSize . _x) `div` (frameSize ^. _x)
+      (row, column) = frame `divMod` perRow
+   in Rectangle (V2 column row * frameSize) frameSize
+
 draw :: GameSystem ()
 draw = do
   renderer <- use loopRenderer
   liftIO (clear renderer)
   atlasCache <- use loopAtlasCache
+  textureCache <- use loopTextureCache
   starfield <- use loopStarfield
   drawStarfield renderer atlasCache starfield
+  now <- getNow
+  let drawBody tex atlasRect bd =
+        copyEx
+          renderer
+          (tex ^. stTexture)
+          (Just (atlasRect ^. to (fromIntegral <$>) . sdlRect))
+          (Just
+             (Rectangle
+                (round <$> (bd ^. bodyPosition))
+                (fromIntegral <$> (bd ^. bodySize)) ^.
+              sdlRect))
+          (bd ^. bodyAngle . degrees . getDegrees . to realToFrac)
+          Nothing
+          (V2 False False)
+  cmapM_ $ \(Body bd, a@Animation {}) -> do
+    animationTexture <-
+      loadTextureCached textureCache (a ^. animationIdentifier . aiAtlasPath)
+    drawBody
+      animationTexture
+      (determineAnimRect (determineAnimFrame now a) a animationTexture)
+      bd
   cmapM_ $ \(Body bd, Image (ImageIdentifier atlasPath atlasName)) -> do
     foundAtlas <- loadAtlasCached atlasCache atlasPath
-    let atlasRect = foundAtlas ^?! atlasFrames . ix atlasName
-    copyEx
-      renderer
+    drawBody
       (foundAtlas ^. atlasTexture)
-      (Just (atlasRect ^. to (fromIntegral <$>) . sdlRect))
-      (Just
-         (Rectangle
-            (round <$> (bd ^. bodyPosition))
-            (fromIntegral <$> (bd ^. bodySize)) ^.
-          sdlRect))
-      (bd ^. bodyAngle . degrees . getDegrees . to realToFrac)
-      Nothing
-      (V2 False False)
+      (foundAtlas ^?! atlasFrames . ix atlasName)
+      bd
   liftIO (present renderer)
 
 withBackgroundMusic :: IO c -> IO c

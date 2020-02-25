@@ -79,3 +79,15 @@ laserImage = ImageIdentifier mainAtlasPath "laserBlue01.png"
 
 asteroidMediumImage :: ImageIdentifier
 asteroidMediumImage = ImageIdentifier mainAtlasPath "meteorBrown_med1.png"
+
+explosionSize :: V2 Int
+explosionSize = V2 32 32
+
+explosionAnimation :: AnimationIdentifier
+explosionAnimation =
+  AnimationIdentifier
+    { _aiAtlasPath = imagePath </> "explosion.png"
+    , _aiFrameCount = 32
+    , _aiFrameSize = V2 64 64
+    , _aiFrameDuration = 30
+    }

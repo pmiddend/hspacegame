@@ -11,10 +11,10 @@
 module SG.Types where
 
 import Apecs
-import Control.Lens (Lens', (&), (.~), (^.), lens, makeLenses, to)
+import Control.Lens (Getter, Lens', (&), (.~), (^.), lens, makeLenses, to)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
-import Data.Time.Units (Millisecond, TimeUnit, fromMicroseconds)
+import Data.Time.Units (Millisecond, TimeUnit, fromMicroseconds, toMicroseconds)
 import Linear.V2 (V2(V2))
 import Linear.Vector ((^/))
 import SG.Math
@@ -22,6 +22,7 @@ import System.Clock
   ( Clock(Monotonic)
   , TimeSpec
   , diffTimeSpec
+  , fromNanoSecs
   , getTime
   , toNanoSecs
   )
@@ -59,6 +60,8 @@ makeLenses ''Body
 
 type Health = Int
 
+type TimePoint = TimeSpec
+
 bodyRectangle :: Lens' Body (Rectangle Double)
 bodyRectangle =
   lens
@@ -86,6 +89,33 @@ newtype Image =
 instance Component Image where
   type Storage Image = Map Image
 
+data AnimationIdentifier =
+  AnimationIdentifier
+    { _aiAtlasPath :: FilePath
+    , _aiFrameCount :: Int
+    , _aiFrameSize :: V2 Int
+    , _aiFrameDuration :: Millisecond
+    }
+  deriving (Show)
+
+makeLenses ''AnimationIdentifier
+
+aiTotalDuration :: Getter AnimationIdentifier Millisecond
+aiTotalDuration =
+  to (\ai -> fromIntegral (ai ^. aiFrameCount) * (ai ^. aiFrameDuration))
+
+data Animation =
+  Animation
+    { _animationIdentifier :: AnimationIdentifier
+    , _animationStart :: TimePoint
+    }
+  deriving (Show)
+
+makeLenses ''Animation
+
+instance Component Animation where
+  type Storage Animation = Map Animation
+
 data Target =
   Target
     { _targetRadius :: Double
@@ -110,6 +140,17 @@ makeLenses ''Bullet
 instance Component Bullet where
   type Storage Bullet = Map Bullet
 
+newtype Lifetime =
+  Lifetime
+    { _lifetimeEnd :: TimePoint
+    }
+  deriving (Show)
+
+makeLenses ''Lifetime
+
+instance Component Lifetime where
+  type Storage Lifetime = Map Lifetime
+
 data Player =
   Player
   deriving (Show)
@@ -117,9 +158,11 @@ data Player =
 instance Component Player where
   type Storage Player = Unique Player
 
-makeWorld "World" [''Body, ''Player, ''Target, ''Bullet, ''Image]
+makeWorld
+  "World"
+  [''Body, ''Player, ''Target, ''Bullet, ''Image, ''Animation, ''Lifetime]
 
-type AllComponents = (Body, Player, Target, Bullet, Image)
+type AllComponents = (Body, Player, Target, Bullet, Image, Animation)
 
 type System' a = System World a
 
@@ -130,10 +173,11 @@ type PlayerDirection = V2 Int
 initialPlayerDirection :: PlayerDirection
 initialPlayerDirection = V2 0 0
 
-type TimePoint = TimeSpec
-
 getNow :: MonadIO m => m TimePoint
 getNow = liftIO (getTime Monotonic)
+
+addTime :: TimeUnit a => TimePoint -> a -> TimePoint
+addTime tp duration = tp + fromNanoSecs (toMicroseconds duration * 1000)
 
 -- TODO: use "acts" to define algebras on time points and durations
 timeDiff :: TimeUnit a => TimePoint -> TimePoint -> a
