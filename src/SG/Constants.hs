@@ -4,7 +4,7 @@ module SG.Constants where
 
 import Data.Time.Units (Millisecond)
 import Linear.V2 (V2(V2))
-import SG.Math (Rectangle(Rectangle))
+import SG.Math (Radians(Radians), Rectangle(Rectangle))
 import SG.Types (ImageIdentifier(..))
 import System.FilePath ((</>))
 
@@ -28,6 +28,12 @@ playerSize = V2 50 32
 
 asteroidMediumSize :: V2 Int
 asteroidMediumSize = V2 42 42
+
+asteroidVelocity :: V2 Double
+asteroidVelocity = V2 0 200
+
+asteroidAngularVelocity :: Radians
+asteroidAngularVelocity = Radians 0.3
 
 laserSize :: V2 Int
 laserSize = V2 4 26
@@ -55,3 +61,6 @@ playerImage = ImageIdentifier mainAtlasPath "playerShip1_blue.png"
 
 laserImage :: ImageIdentifier
 laserImage = ImageIdentifier mainAtlasPath "laserBlue01.png"
+
+asteroidMediumImage :: ImageIdentifier
+asteroidMediumImage = ImageIdentifier mainAtlasPath "meteorBrown_med1.png"

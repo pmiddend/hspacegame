@@ -12,6 +12,7 @@
 module SG.Game where
 
 import Apecs (SystemT, cmap, cmapM, cmapM_, destroy, newEntity, runWith)
+import Control.Arrow ((***))
 import Control.Exception (bracket, bracket_)
 import Control.Exception.Lifted (catch)
 import Control.Lens
@@ -38,7 +39,13 @@ import Data.Foldable (fold, for_)
 import Data.Monoid (All(All), getAll)
 import Data.Proxy
 import Data.StateVar (($=))
-import Data.Time.Units (Microsecond, Millisecond, toMicroseconds)
+import Data.Time.Units
+  ( Microsecond
+  , Millisecond
+  , TimeUnit
+  , convertUnit
+  , toMicroseconds
+  )
 import Linear.V2 (V2(V2), _x, _y)
 import Linear.Vector ((*^), (^/))
 import Numeric.Lens (negated)
@@ -272,26 +279,47 @@ maybeShoot = do
     loopLastShot .= Just now
     playChunk chunkCache pewPath
 
-level :: Level
-level =
+simpleLevel :: Level
+simpleLevel =
   [ Spawn
-      1000
-      SpawnTypeAsteroidMedium
-      (V2 500 (fromIntegral (asteroidMediumSize ^. _y . negated)))
+      { _spawnTimeDiff = 5000 :: Millisecond
+      , _spawnType = SpawnTypeAsteroidMedium
+      , _spawnPosition =
+          V2 500 (fromIntegral (asteroidMediumSize ^. _y . negated))
+      }
   ]
 
 (^!) :: MonadIO m => m s -> Getting a s a -> m a
 a ^! b = view b <$> a
 
+spawn :: Spawn -> GameSystem ()
+spawn s =
+  void $
+  newEntity
+    ( Target
+    , Body
+        { _bodyPosition = s ^. spawnPosition
+        , _bodySize = asteroidMediumSize
+        , _bodyAngle = Radians 0
+        , _bodyVelocity = asteroidVelocity
+        , _bodyAngularVelocity = asteroidAngularVelocity
+        }
+    , Image asteroidMediumImage)
+
+elapsedTime :: GameSystem Millisecond
+elapsedTime = timeDiff <$> getNow <*> use loopGameStart
+
 spawnEnemies :: GameSystem ()
 spawnEnemies = do
-  level <- use loopLevel
-  gameStart <- use loopGameStart
-  now <- getNow
-  let elapsed :: Millisecond
-      elapsed = now `timeDiff` gameStart
-      relevantEvents = filter (\s -> elapsed <= (s ^. spawnTimeDiff)) level
-  loopLevel %= filter (\s -> elapsed > (s ^. spawnTimeDiff))
+  elapsed <- elapsedTime
+  currentLevel <- use loopLevel
+  remainingLevel <- spawnEnemies' elapsed currentLevel
+  loopLevel .= remainingLevel
+  where
+    spawnEnemies' :: TimeUnit a => a -> [Spawn] -> GameSystem [Spawn]
+    spawnEnemies' elapsed =
+      uncurry (>>) . (mapM_ spawn *** pure) .
+      span ((< convertUnit elapsed) . view spawnTimeDiff)
 
 mainLoop :: GameSystem ()
 mainLoop = do
@@ -376,6 +404,6 @@ gameMain =
                     initialPlayerDirection
                     Released
                     Nothing
-                    level
+                    simpleLevel
                     gameStart
             runLoop initialLoopData (runWith w (initEcs >> mainLoop))
