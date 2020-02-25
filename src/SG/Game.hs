@@ -18,15 +18,18 @@ import Control.Exception.Lifted (catch)
 import Control.Lens
   ( Getting
   , (%=)
+  , (%~)
   , (&)
   , (+=)
   , (+~)
   , (.=)
   , (^.)
   , (^?!)
+  , folded
   , ix
   , makeLenses
   , to
+  , traversed
   , use
   , view
   )
@@ -222,14 +225,17 @@ updateBodies = do
   timeDelta <- use loopDelta
   cmapM $ \(b@Body {}, ety) -> do
     unless (inBounds b) (destroy ety (Proxy @AllComponents))
-    pure (b & bodyPosition +~ timeDelta *^ (b ^. bodyVelocity))
+    pure
+      (b & bodyData . bodyPosition +~ timeDelta *^
+       (b ^. bodyData . bodyVelocity))
 
 initEcs :: GameSystem ()
 initEcs =
   void $
   newEntity
     ( Player
-    , Body
+    , Body $
+      BodyData
         { _bodyPosition =
             ((fromIntegral <$> gameSize) ^/ 2.0) - (fromIntegral <$> playerSize) ^/
             2.0
@@ -261,15 +267,17 @@ maybeShoot = do
     (spacePressed == Pressed &&
      getAll
        (foldMap (All . (> playerShootingFrequency) . (now `timeDiff`)) lastShot)) $
-    cmapM_ $ \(Player, Body {_bodyPosition = playerPos, _bodySize = playerSize'}) -> do
+    cmapM_ $ \(Player, Body bd) -> do
     void $
       newEntity
         ( Bullet
-        , Body
+        , Body $
+          BodyData
             { _bodyPosition =
                 V2
-                  (playerPos ^. _x + fromIntegral (playerSize' ^. _x) / 2.0)
-                  (playerPos ^. _y)
+                  (bd ^. bodyPosition . _x + fromIntegral (bd ^. bodySize . _x) /
+                   2.0)
+                  (bd ^. bodyPosition . _y)
             , _bodySize = laserSize
             , _bodyAngle = Radians 0
             , _bodyVelocity = laserSpeed
@@ -297,7 +305,8 @@ spawn s =
   void $
   newEntity
     ( Target
-    , Body
+    , Body $
+      BodyData
         { _bodyPosition = s ^. spawnPosition
         , _bodySize = asteroidMediumSize
         , _bodyAngle = Radians 0
@@ -321,6 +330,14 @@ spawnEnemies = do
       uncurry (>>) . (mapM_ spawn *** pure) .
       span ((< convertUnit elapsed) . view spawnTimeDiff)
 
+-- handleCollisions =
+--   cmapM_ $ \(Target, Body, etyT) ->
+--     cmapM_ $ \(Bullet, Body, etyB) ->
+--       when (norm (posT - posB) < 10) $ do
+--         destroy etyT (Proxy @(Target, Kinetic))
+--         destroy etyB (Proxy @(Bullet, Kinetic))
+--         spawnParticles 15 (Position posB) (-500,500) (200,-50)
+--         modify global $ \(Score x) -> Score (x + hitBonus)
 mainLoop :: GameSystem ()
 mainLoop = do
   beforeFrame <- getNow
@@ -348,8 +365,8 @@ updatePlayer :: GameSystem ()
 updatePlayer = do
   timeDelta <- use loopDelta
   keys <- use loopPlayerKeys
-  cmap $ \(Player, b@Body {_bodyVelocity = v}) ->
-    b {_bodyVelocity = updatePlayerVelocity timeDelta keys v}
+  cmap $ \(Player, Body b) ->
+    Body (b & bodyVelocity %~ updatePlayerVelocity timeDelta keys)
 
 draw :: GameSystem ()
 draw = do
@@ -358,15 +375,19 @@ draw = do
   atlasCache <- use loopAtlasCache
   starfield <- use loopStarfield
   drawStarfield renderer atlasCache starfield
-  cmapM_ $ \(Body pos size angle _ _, Image (ImageIdentifier atlasPath atlasName)) -> do
+  cmapM_ $ \(Body bd, Image (ImageIdentifier atlasPath atlasName)) -> do
     foundAtlas <- loadAtlasCached atlasCache atlasPath
     let atlasRect = foundAtlas ^?! atlasFrames . ix atlasName
     copyEx
       renderer
       (foundAtlas ^. atlasTexture)
       (Just (atlasRect ^. to (fromIntegral <$>) . sdlRect))
-      (Just (Rectangle (round <$> pos) (fromIntegral <$> size) ^. sdlRect))
-      (angle ^. degrees . getDegrees . to realToFrac)
+      (Just
+         (Rectangle
+            (round <$> (bd ^. bodyPosition))
+            (fromIntegral <$> (bd ^. bodySize)) ^.
+          sdlRect))
+      (bd ^. bodyAngle . degrees . getDegrees . to realToFrac)
       Nothing
       (V2 False False)
   liftIO (present renderer)

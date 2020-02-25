@@ -25,13 +25,21 @@ import System.Clock
   , toNanoSecs
   )
 
-data Body =
-  Body
+data BodyData =
+  BodyData
     { _bodyPosition :: V2 Double
     , _bodySize :: V2 Int
     , _bodyAngle :: Radians
     , _bodyVelocity :: V2 Double
     , _bodyAngularVelocity :: Radians
+    }
+  deriving (Show)
+
+makeLenses ''BodyData
+
+newtype Body =
+  Body
+    { _bodyData :: BodyData
     }
   deriving (Show)
 
@@ -43,9 +51,12 @@ makeLenses ''Body
 bodyRectangle :: Lens' Body (Rectangle Double)
 bodyRectangle =
   lens
-    (\b -> Rectangle (b ^. bodyPosition) (b ^. bodySize . to (fromIntegral <$>)))
+    (\b ->
+       Rectangle
+         (b ^. bodyData . bodyPosition)
+         (b ^. bodyData . bodySize . to (fromIntegral <$>)))
     (\b r ->
-       b & (bodyPosition .~ (r ^. rectPos)) & bodySize .~
+       b & (bodyData . bodyPosition .~ (r ^. rectPos)) & bodyData . bodySize .~
        (round <$> (r ^. rectSize)))
 
 data ImageIdentifier =
