@@ -176,7 +176,7 @@ eventHandler :: EventPayload -> GameSystem FinishState
 eventHandler QuitEvent = pure Finished
 eventHandler (KeyboardEvent (KeyboardEventData _ Pressed _ (Keysym _ KC.KeycodeEscape _))) =
   pure Finished
-eventHandler (KeyboardEvent (KeyboardEventData _ spaceStatus _ (Keysym _ KC.KeycodeSpace _))) =
+eventHandler (KeyboardEvent (KeyboardEventData _ spaceStatus False (Keysym _ KC.KeycodeSpace _))) =
   continue $ do
     loopSpacePressed .= spaceStatus
     loopLastShot %= resetIf (spaceStatus == Pressed)
