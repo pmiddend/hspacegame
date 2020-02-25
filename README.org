@@ -1,0 +1,3 @@
+* hspacegame — a little space shooter in Haskell + SDL2
+
+There’s nothing much to see here — yet. I’m still working on the game. Screenshots etc. follow.
