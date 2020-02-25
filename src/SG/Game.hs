@@ -11,7 +11,7 @@
 
 module SG.Game where
 
-import Apecs (SystemT, cmap, cmapM, cmapM_, destroy, newEntity, runWith)
+import Apecs (SystemT, cmap, cmapM, cmapM_, destroy, newEntity, runWith, set)
 import Control.Arrow ((***))
 import Control.Exception (bracket, bracket_)
 import Control.Exception.Lifted (catch)
@@ -111,6 +111,7 @@ data LoopData =
     , _loopLastShot :: Maybe TimePoint
     , _loopLevel :: Level
     , _loopGameStart :: TimePoint
+    , _loopScore :: Int
     }
 
 makeLenses ''LoopData
@@ -252,16 +253,16 @@ playCatchIO c =
     (play c `catch` \e ->
        putStrLn ("play sound failed" <> show (e :: SDLException)))
 
-playChunk :: MonadIO m => ChunkCache -> FilePath -> m ()
-playChunk cache fp = do
-  c <- loadChunk cache fp
+playChunk :: FilePath -> GameSystem ()
+playChunk fp = do
+  chunkCache <- use loopChunkCache
+  c <- loadChunk chunkCache fp
   playCatchIO c
 
 maybeShoot :: GameSystem ()
 maybeShoot = do
   spacePressed <- use loopSpacePressed
   lastShot <- use loopLastShot
-  chunkCache <- use loopChunkCache
   now <- getNow
   when
     (spacePressed == Pressed &&
@@ -270,7 +271,7 @@ maybeShoot = do
     cmapM_ $ \(Player, Body bd) -> do
     void $
       newEntity
-        ( Bullet
+        ( Bullet laserRadius laserDamage
         , Body $
           BodyData
             { _bodyPosition =
@@ -285,7 +286,7 @@ maybeShoot = do
             }
         , Image laserImage)
     loopLastShot .= Just now
-    playChunk chunkCache pewPath
+    playChunk pewPath
 
 simpleLevel :: Level
 simpleLevel =
@@ -304,7 +305,7 @@ spawn :: Spawn -> GameSystem ()
 spawn s =
   void $
   newEntity
-    ( Target
+    ( Target asteroidMediumRadius asteroidMediumHealth
     , Body $
       BodyData
         { _bodyPosition = s ^. spawnPosition
@@ -330,14 +331,23 @@ spawnEnemies = do
       uncurry (>>) . (mapM_ spawn *** pure) .
       span ((< convertUnit elapsed) . view spawnTimeDiff)
 
--- handleCollisions =
---   cmapM_ $ \(Target, Body, etyT) ->
---     cmapM_ $ \(Bullet, Body, etyB) ->
---       when (norm (posT - posB) < 10) $ do
---         destroy etyT (Proxy @(Target, Kinetic))
---         destroy etyB (Proxy @(Bullet, Kinetic))
---         spawnParticles 15 (Position posB) (-500,500) (200,-50)
---         modify global $ \(Score x) -> Score (x + hitBonus)
+handleCollisions :: GameSystem ()
+handleCollisions =
+  cmapM_ $ \(Target tr th, Body bdT, etyT) ->
+    cmapM_ $ \(Bullet br bd, Body bdB, etyB) -> do
+      when
+        (circlesIntersect
+           (Circle (bdT ^. bodyCenter) tr)
+           (Circle (bdB ^. bodyCenter) br)) $ do
+        destroy etyB (Proxy @AllComponents)
+        let newHealth = th - bd
+        if newHealth <= 0
+          then do
+            destroy etyT (Proxy @AllComponents)
+            playChunk explosionSoundPath
+            loopScore += 1
+          else set etyT (Target tr newHealth)
+
 mainLoop :: GameSystem ()
 mainLoop = do
   beforeFrame <- getNow
@@ -351,6 +361,7 @@ mainLoop = do
       updateBodies
       spawnEnemies
       maybeShoot
+      handleCollisions
       afterFrame <- getNow
       let timeDiffSecs =
             fromIntegral
@@ -427,4 +438,5 @@ gameMain =
                     Nothing
                     simpleLevel
                     gameStart
+                    0
             runLoop initialLoopData (runWith w (initEcs >> mainLoop))

@@ -16,6 +16,7 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
 import Data.Time.Units (Millisecond, TimeUnit, fromMicroseconds)
 import Linear.V2 (V2(V2))
+import Linear.Vector ((^/))
 import SG.Math
 import System.Clock
   ( Clock(Monotonic)
@@ -37,6 +38,14 @@ data BodyData =
 
 makeLenses ''BodyData
 
+bodyCenter :: Lens' BodyData (V2 Double)
+bodyCenter =
+  lens
+    (\b -> (b ^. bodyPosition) + (fromIntegral <$> (b ^. bodySize)) ^/ 2.0)
+    (\b newCenter ->
+       b & bodyPosition .~
+       (newCenter - (fromIntegral <$> (b ^. bodySize)) ^/ 2.0))
+
 newtype Body =
   Body
     { _bodyData :: BodyData
@@ -47,6 +56,8 @@ instance Component Body where
   type Storage Body = Map Body
 
 makeLenses ''Body
+
+type Health = Int
 
 bodyRectangle :: Lens' Body (Rectangle Double)
 bodyRectangle =
@@ -77,14 +88,24 @@ instance Component Image where
 
 data Target =
   Target
+    { _targetRadius :: Double
+    , _targetHealth :: Health
+    }
   deriving (Show)
+
+makeLenses ''Target
 
 instance Component Target where
   type Storage Target = Map Target
 
 data Bullet =
   Bullet
+    { _bulletRadius :: Double
+    , _bulletHealth :: Health
+    }
   deriving (Show)
+
+makeLenses ''Bullet
 
 instance Component Bullet where
   type Storage Bullet = Map Bullet

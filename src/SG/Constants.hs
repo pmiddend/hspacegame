@@ -4,8 +4,8 @@ module SG.Constants where
 
 import Data.Time.Units (Millisecond)
 import Linear.V2 (V2(V2))
-import SG.Math (Radians(Radians), Rectangle(Rectangle))
-import SG.Types (ImageIdentifier(..))
+import SG.Math
+import SG.Types
 import System.FilePath ((</>))
 
 playerShootingFrequency :: Millisecond
@@ -29,6 +29,15 @@ playerSize = V2 50 32
 asteroidMediumSize :: V2 Int
 asteroidMediumSize = V2 42 42
 
+asteroidMediumRadius :: Double
+asteroidMediumRadius = 38.0
+
+asteroidMediumHealth :: Health
+asteroidMediumHealth = 100
+
+laserDamage :: Health
+laserDamage = 50
+
 asteroidVelocity :: V2 Double
 asteroidVelocity = V2 0 200
 
@@ -37,6 +46,9 @@ asteroidAngularVelocity = Radians 0.3
 
 laserSize :: V2 Int
 laserSize = V2 4 26
+
+laserRadius :: Double
+laserRadius = 24.0
 
 laserSpeed :: V2 Double
 laserSpeed = V2 0 (-300)
@@ -55,6 +67,9 @@ mainAtlasPath = imagePath </> "main-atlas.png"
 
 pewPath :: FilePath
 pewPath = basePath </> "Bonus" </> "sfx_laser1.wav"
+
+explosionSoundPath :: FilePath
+explosionSoundPath = basePath </> "explosion-short.wav"
 
 playerImage :: ImageIdentifier
 playerImage = ImageIdentifier mainAtlasPath "playerShip1_blue.png"

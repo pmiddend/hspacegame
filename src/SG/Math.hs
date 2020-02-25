@@ -4,6 +4,7 @@
 module SG.Math where
 
 import Control.Lens (Iso', Lens', (^.), iso, lens, makeLenses, set)
+import Linear.Metric (quadrance)
 import Linear.V2 (V2(V2), _x, _y)
 import Linear.Vector ((*^), (^/))
 import SDL.Vect (Point(P))
@@ -82,3 +83,13 @@ rectIntersect outer inner =
 
 rectEmbiggen :: Fractional a => a -> Rectangle a -> Rectangle a
 rectEmbiggen f r = rectFromCenter (r ^. rectCenter) (f *^ (r ^. rectSize))
+
+data Circle a =
+  Circle
+    { _circleCenter :: V2 a
+    , _circleRadius :: a
+    }
+
+circlesIntersect :: (Num a, Ord a) => Circle a -> Circle a -> Bool
+circlesIntersect (Circle c1 r1) (Circle c2 r2) =
+  quadrance (c2 - c1) < (r1 + r2) * (r1 + r2)
