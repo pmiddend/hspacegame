@@ -47,6 +47,7 @@ data LoopData =
     , _loopLevel :: Level
     , _loopGameStart :: TimePoint
     , _loopScore :: Int
+    , _loopEnergy :: Energy
     }
 
 makeLenses ''LoopData

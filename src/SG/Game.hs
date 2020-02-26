@@ -28,7 +28,7 @@ import Data.Default.Class (def)
 import Data.Foldable (fold, for_)
 import Data.Monoid (All(All), getAll)
 import Data.Proxy
-import Data.StateVar (($=))
+import Data.StateVar (($=), get)
 import Data.Time.Units
   ( Microsecond
   , Millisecond
@@ -51,6 +51,7 @@ import SDL.Init (InitFlag(InitAudio, InitVideo), initialize, quit)
 import SDL.Input.Keyboard (Keysym(Keysym))
 import qualified SDL.Input.Keyboard.Codes as KC
 import SDL.Mixer (withAudio)
+import SDL.Vect (V4(V4))
 import SDL.Video
   ( RendererConfig
   , WindowConfig(windowInitialSize, windowResizable)
@@ -62,7 +63,7 @@ import SDL.Video
   , destroyWindow
   , rendererLogicalSize
   )
-import SDL.Video.Renderer (clear, copyEx, present)
+import SDL.Video.Renderer (clear, copyEx, fillRect, present, rendererDrawColor)
 import SG.Atlas
 import SG.ChunkCache
 import SG.Constants
@@ -344,6 +345,32 @@ determineAnimRect frame anim texture =
       (row, column) = frame `divMod` perRow
    in Rectangle (V2 column row * frameSize) frameSize
 
+fillRectColor :: Rectangle Int -> Color -> GameSystem ()
+fillRectColor r c = do
+  renderer <- use loopRenderer
+  let drawColor = rendererDrawColor renderer
+  colorBefore <- get drawColor
+  drawColor $= c
+  fillRect renderer (Just (r ^. to (fromIntegral <$>) . sdlRect))
+  drawColor $= colorBefore
+
+drawEnergy :: GameSystem ()
+drawEnergy = do
+  let energyWidth = 200
+      energyHeight = 20
+      energyPos = V2 5 5
+  currentEnergy <- use loopEnergy
+  fillRectColor
+    (Rectangle energyPos (V2 energyWidth energyHeight))
+    (V4 255 0 0 255)
+  fillRectColor
+    (Rectangle
+       energyPos
+       (V2
+          (fromIntegral ((currentEnergy * Energy 100) `div` initialEnergy))
+          energyHeight))
+    (V4 0 255 0 255)
+
 draw :: GameSystem ()
 draw = do
   renderer <- use loopRenderer
@@ -352,6 +379,7 @@ draw = do
   textureCache <- use loopTextureCache
   starfield <- use loopStarfield
   drawStarfield renderer atlasCache starfield
+  drawEnergy
   now <- getNow
   let drawBody tex atlasRect bd =
         copyEx
@@ -407,4 +435,5 @@ gameMain =
                     simpleLevel
                     gameStart
                     0
+                    (Energy 50)
             runLoop initialLoopData (runWith w (initEcs >> mainLoop))

@@ -91,3 +91,6 @@ explosionAnimation =
     , _aiFrameSize = V2 64 64
     , _aiFrameDuration = 30
     }
+
+initialEnergy :: Energy
+initialEnergy = Energy 100

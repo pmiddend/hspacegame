@@ -15,8 +15,10 @@ import Control.Lens (Getter, Lens', (&), (.~), (^.), lens, makeLenses, to)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
 import Data.Time.Units (Millisecond, TimeUnit, fromMicroseconds, toMicroseconds)
+import Data.Word (Word8)
 import Linear.V2 (V2(V2))
 import Linear.Vector ((^/))
+import SDL.Vect (V4)
 import SG.Math
 import System.Clock
   ( Clock(Monotonic)
@@ -199,3 +201,13 @@ data Spawn =
 makeLenses ''Spawn
 
 type Level = [Spawn]
+
+type Score = Int
+
+newtype Energy =
+  Energy
+    { _energy :: Int
+    }
+  deriving (Num, Enum, Integral, Real, Ord, Eq)
+
+type Color = V4 Word8
