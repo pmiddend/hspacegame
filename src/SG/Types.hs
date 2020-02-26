@@ -202,12 +202,16 @@ makeLenses ''Spawn
 
 type Level = [Spawn]
 
-type Score = Int
+newtype Score =
+  Score
+    { _score :: Score
+    }
+  deriving (Num, Enum, Integral, Real, Ord, Eq)
 
 newtype Energy =
   Energy
-    { _energy :: Int
+    { _energy :: Double
     }
-  deriving (Num, Enum, Integral, Real, Ord, Eq)
+  deriving (Num, Enum, Ord, Eq, Real, RealFrac, Fractional, Floating, RealFloat)
 
 type Color = V4 Word8

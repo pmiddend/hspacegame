@@ -19,7 +19,6 @@ import Control.Monad.Trans.Class (lift)
 import Data.Proxy
 import Data.Time.Units (Millisecond)
 import Linear.V2 (V2)
-import SDL.Event (InputMotion)
 import SDL.Exception (SDLException)
 import SDL.Mixer (Chunk, pattern Forever, free, load, play, playMusic)
 import SDL.Video (Renderer)
@@ -42,12 +41,11 @@ data LoopData =
     , _loopWorld :: World
     , _loopStarfield :: Starfield
     , _loopPlayerKeys :: PlayerKeys
-    , _loopSpacePressed :: InputMotion
-    , _loopLastShot :: Maybe TimePoint
     , _loopLevel :: Level
     , _loopGameStart :: TimePoint
-    , _loopScore :: Int
-    , _loopEnergy :: Energy
+    , _loopScore :: Score
+    , _loopCurrentEnergy :: Energy
+    , _loopMaxEnergy :: Energy
     }
 
 makeLenses ''LoopData

@@ -92,5 +92,11 @@ explosionAnimation =
     , _aiFrameDuration = 30
     }
 
-initialEnergy :: Energy
-initialEnergy = Energy 100
+initialMaxEnergy :: Energy
+initialMaxEnergy = Energy 100
+
+laserEnergy :: Energy
+laserEnergy = Energy 80
+
+energyReplenishPerSecond :: Energy
+energyReplenishPerSecond = Energy 60

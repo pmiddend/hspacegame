@@ -1,56 +1,61 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module SG.TimeUnits where
 
-import Data.Ratio ((%))
-
-data TSeconds
-
-data TNanoseconds
+import Data.Kind (Type)
+import Data.Ratio (Ratio, (%), denominator, numerator)
 
 data TimeUnit
   = Nanoseconds
   | Seconds
 
-data WitnessUnit a where
-  WitnessSeconds :: WitnessUnit 'Seconds
-  WitnessNanoseconds :: WitnessUnit 'Nanoseconds
-
 data Duration a (unit :: TimeUnit) =
-  Duration
+  UnsafeMkDuration
     { durationValue :: a
-    , durationUnit :: WitnessUnit unit
     }
 
+data SingTU :: TimeUnit -> Type where
+  SNanoseconds :: SingTU 'Nanoseconds
+  SSeconds :: SingTU 'Seconds
+
 doubleSecond :: Double -> Duration Double 'Seconds
-doubleSecond x = Duration x WitnessSeconds
+doubleSecond = UnsafeMkDuration
 
 integerNanosecond :: Integer -> Duration Integer 'Nanoseconds
-integerNanosecond y = Duration y WitnessNanoseconds
+integerNanosecond = UnsafeMkDuration
 
-durationDiff :: Num a => Duration a k -> Duration a k -> Duration a k
-durationDiff (Duration x w) (Duration y _) = Duration (x - y) w
+durationRatio :: Integral a => SingTU s -> Ratio a
+durationRatio sng =
+  case sng of
+    SNanoseconds -> 1 % 1000000000
+    SSeconds -> 1
 
-class RatioGiver a where
-  giveRatio :: a -> Rational
+class SingTUI s where
+  singTU :: SingTU s
 
-instance RatioGiver TSeconds where
-  giveRatio _ = 1
+instance SingTUI 'Nanoseconds where
+  singTU = SNanoseconds
 
-instance RatioGiver TNanoseconds where
-  giveRatio _ = 1000000000
+instance SingTUI 'Seconds where
+  singTU = SSeconds
 
--- type family TimeRatio c
--- type instance TimeRatio 'Seconds = '1
--- factor :: WitnessUnit a -> Rational
--- factor WitnessSeconds = 1
--- factor WitnessNanoseconds = 1 % 1000000000
--- factor :: a -> Rational
--- factor '
--- Example: Nanoseconds Int to Seconds Double
--- do "* factor Nanoseconds / factor Seconds"
-convert :: Duration a u1 -> Duration b u2
-convert (Duration x w) = factor w * factor w2
+convertIntegral ::
+     forall a b s1 s2. (Integral a, Integral b, SingTUI s1, SingTUI s2)
+  => Duration a s1
+  -> Duration b s2
+convertIntegral (UnsafeMkDuration a) =
+  let ratio :: Ratio a
+      ratio =
+        recip (durationRatio (singTU :: SingTU s1)) *
+        durationRatio (singTU :: SingTU s2)
+      rationalValue :: Ratio a
+      rationalValue = ratio * fromIntegral a
+   in UnsafeMkDuration
+        (fromIntegral (numerator rationalValue `div` denominator rationalValue))

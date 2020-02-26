@@ -14,6 +14,7 @@ import Control.Lens
   , (&)
   , (+=)
   , (+~)
+  , (-=)
   , (.=)
   , (^.)
   , (^?!)
@@ -26,7 +27,6 @@ import Control.Monad (unless, void, when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Default.Class (def)
 import Data.Foldable (fold, for_)
-import Data.Monoid (All(All), getAll)
 import Data.Proxy
 import Data.StateVar (($=), get)
 import Data.Time.Units
@@ -42,7 +42,7 @@ import Numeric.Lens (negated)
 import Prelude hiding (lookup)
 import SDL.Event
   ( EventPayload(KeyboardEvent, QuitEvent)
-  , InputMotion(Pressed, Released)
+  , InputMotion(Pressed)
   , KeyboardEventData(KeyboardEventData)
   , eventPayload
   , pollEvents
@@ -130,10 +130,8 @@ eventHandler :: EventPayload -> GameSystem FinishState
 eventHandler QuitEvent = pure Finished
 eventHandler (KeyboardEvent (KeyboardEventData _ Pressed _ (Keysym _ KC.KeycodeEscape _))) =
   pure Finished
-eventHandler (KeyboardEvent (KeyboardEventData _ spaceStatus False (Keysym _ KC.KeycodeSpace _))) =
-  continue $ do
-    loopSpacePressed .= spaceStatus
-    loopLastShot %= resetIf (spaceStatus == Pressed)
+eventHandler (KeyboardEvent (KeyboardEventData _ Pressed False (Keysym _ KC.KeycodeSpace _))) =
+  continue shoot
 eventHandler (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ kc _))) =
   continue $ for_ (keyCodeToPlayerDirection keyState kc) (loopPlayerKeys +=)
 eventHandler _ = continue (pure ())
@@ -195,34 +193,30 @@ initEcs =
         }
     , Image playerImage)
 
-maybeShoot :: GameSystem ()
-maybeShoot = do
-  spacePressed <- use loopSpacePressed
-  lastShot <- use loopLastShot
-  now <- getNow
-  when
-    (spacePressed == Pressed &&
-     getAll
-       (foldMap (All . (> playerShootingFrequency) . (now `timeDiff`)) lastShot)) $
+shoot :: GameSystem ()
+shoot = do
+  currentEnergy <- use loopCurrentEnergy
+  when (currentEnergy > laserEnergy) $ do
+    loopCurrentEnergy -= laserEnergy
     cmapM_ $ \(Player, Body bd) -> do
-    void $
-      newEntity
-        ( Bullet laserRadius laserDamage
-        , Body $
-          BodyData
-            { _bodyPosition =
-                V2
-                  (bd ^. bodyPosition . _x + fromIntegral (bd ^. bodySize . _x) /
-                   2.0)
-                  (bd ^. bodyPosition . _y)
-            , _bodySize = laserSize
-            , _bodyAngle = Radians 0
-            , _bodyVelocity = laserSpeed
-            , _bodyAngularVelocity = Radians 0
-            }
-        , Image laserImage)
-    loopLastShot .= Just now
-    playChunk pewPath
+      void $
+        newEntity
+          ( Bullet laserRadius laserDamage
+          , Body $
+            BodyData
+              { _bodyPosition =
+                  V2
+                    (bd ^. bodyPosition . _x +
+                     fromIntegral (bd ^. bodySize . _x) /
+                     2.0)
+                    (bd ^. bodyPosition . _y)
+              , _bodySize = laserSize
+              , _bodyAngle = Radians 0
+              , _bodyVelocity = laserSpeed
+              , _bodyAngularVelocity = Radians 0
+              }
+          , Image laserImage)
+      playChunk pewPath
 
 simpleLevel :: Level
 simpleLevel =
@@ -309,7 +303,6 @@ mainLoop = do
       deleteRetirees
       updateBodies
       spawnEnemies
-      maybeShoot
       handleCollisions
       afterFrame <- getNow
       let timeDiffSecs =
@@ -359,7 +352,8 @@ drawEnergy = do
   let energyWidth = 200
       energyHeight = 20
       energyPos = V2 5 5
-  currentEnergy <- use loopEnergy
+  currentEnergy <- use loopCurrentEnergy
+  maxEnergy <- use loopMaxEnergy
   fillRectColor
     (Rectangle energyPos (V2 energyWidth energyHeight))
     (V4 255 0 0 255)
@@ -367,9 +361,18 @@ drawEnergy = do
     (Rectangle
        energyPos
        (V2
-          (fromIntegral ((currentEnergy * Energy 100) `div` initialEnergy))
+          (round
+             ((currentEnergy * Energy (fromIntegral energyWidth)) / maxEnergy))
           energyHeight))
     (V4 0 255 0 255)
+
+replenishEnergy :: GameSystem ()
+replenishEnergy = do
+  currentEnergy <- use loopCurrentEnergy
+  maxEnergy <- use loopMaxEnergy
+  delta <- use loopDelta
+  loopCurrentEnergy .=
+    min maxEnergy (currentEnergy + Energy delta * energyReplenishPerSecond)
 
 draw :: GameSystem ()
 draw = do
@@ -379,6 +382,7 @@ draw = do
   textureCache <- use loopTextureCache
   starfield <- use loopStarfield
   drawStarfield renderer atlasCache starfield
+  replenishEnergy
   drawEnergy
   now <- getNow
   let drawBody tex atlasRect bd =
@@ -422,18 +426,18 @@ gameMain =
             gameStart <- getNow
             let initialLoopData =
                   LoopData
-                    textureCache
-                    atlasCache
-                    chunkCache
-                    renderer
-                    0
-                    w
-                    (initStarfield (mkStdGen 0))
-                    initialPlayerDirection
-                    Released
-                    Nothing
-                    simpleLevel
-                    gameStart
-                    0
-                    (Energy 50)
+                    { _loopTextureCache = textureCache
+                    , _loopAtlasCache = atlasCache
+                    , _loopChunkCache = chunkCache
+                    , _loopRenderer = renderer
+                    , _loopDelta = 0
+                    , _loopWorld = w
+                    , _loopStarfield = initStarfield (mkStdGen 0)
+                    , _loopPlayerKeys = initialPlayerDirection
+                    , _loopLevel = simpleLevel
+                    , _loopGameStart = gameStart
+                    , _loopScore = Score 0
+                    , _loopCurrentEnergy = Energy 50
+                    , _loopMaxEnergy = initialMaxEnergy
+                    }
             runLoop initialLoopData (runWith w (initEcs >> mainLoop))
