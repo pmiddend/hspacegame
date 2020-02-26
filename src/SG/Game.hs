@@ -1,33 +1,15 @@
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module SG.Game where
 
-import Apecs
-  ( Set
-  , SystemT
-  , cmap
-  , cmapM
-  , cmapM_
-  , destroy
-  , newEntity
-  , runWith
-  , set
-  )
+import Apecs (Set, cmap, cmapM, cmapM_, destroy, newEntity, runWith, set)
 import Control.Arrow ((***))
 import Control.Exception (bracket, bracket_)
-import Control.Exception.Lifted (catch)
 import Control.Lens
-  ( Getting
-  , (%=)
+  ( (%=)
   , (%~)
   , (&)
   , (+=)
@@ -35,24 +17,18 @@ import Control.Lens
   , (.=)
   , (^.)
   , (^?!)
-  , folded
   , ix
-  , makeLenses
   , to
-  , traversed
   , use
   , view
   )
 import Control.Monad (unless, void, when)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.State.Strict (MonadState, StateT, evalStateT, get, put)
-import Control.Monad.Trans.Class (lift)
+import Control.Monad.IO.Class (liftIO)
 import Data.Default.Class (def)
 import Data.Foldable (fold, for_)
 import Data.Monoid (All(All), getAll)
 import Data.Proxy
 import Data.StateVar (($=))
-import Data.Text (pack)
 import Data.Time.Units
   ( Microsecond
   , Millisecond
@@ -71,23 +47,12 @@ import SDL.Event
   , eventPayload
   , pollEvents
   )
-import SDL.Exception (SDLException)
 import SDL.Init (InitFlag(InitAudio, InitVideo), initialize, quit)
 import SDL.Input.Keyboard (Keysym(Keysym))
 import qualified SDL.Input.Keyboard.Codes as KC
-import SDL.Mixer
-  ( Chunk
-  , pattern Forever
-  , free
-  , load
-  , play
-  , playMusic
-  , withAudio
-  )
-import SDL.Video (Texture)
+import SDL.Mixer (withAudio)
 import SDL.Video
-  ( Renderer
-  , RendererConfig
+  ( RendererConfig
   , WindowConfig(windowInitialSize, windowResizable)
   , createRenderer
   , createWindow
@@ -101,41 +66,13 @@ import SDL.Video.Renderer (clear, copyEx, present)
 import SG.Atlas
 import SG.ChunkCache
 import SG.Constants
+import SG.LoopData
 import SG.Math
 import SG.Starfield
 import SG.TextureCache
 import SG.Types
+import SG.Util
 import System.Random (mkStdGen)
-
-type PlayerKeys = V2 Int
-
-data LoopData =
-  LoopData
-    { _loopTextureCache :: TextureCache
-    , _loopAtlasCache :: AtlasCache
-    , _loopChunkCache :: ChunkCache
-    , _loopRenderer :: Renderer
-    , _loopDelta :: Double
-    , _loopWorld :: World
-    , _loopStarfield :: Starfield
-    , _loopPlayerKeys :: PlayerKeys
-    , _loopSpacePressed :: InputMotion
-    , _loopLastShot :: Maybe TimePoint
-    , _loopLevel :: Level
-    , _loopGameStart :: TimePoint
-    , _loopScore :: Int
-    }
-
-makeLenses ''LoopData
-
---type GameSystem a = StateT LoopData (SystemT World IO) a
-type LoopState = StateT LoopData IO
-
-type GameSystem = SystemT World LoopState
-
-instance MonadState s m => MonadState s (SystemT w m) where
-  get = lift get
-  put s = lift (put s)
 
 windowConfig :: WindowConfig
 windowConfig =
@@ -188,13 +125,6 @@ keyCodeToPlayerDirection c KC.KeycodeS =
        else -1)
 keyCodeToPlayerDirection _ _ = Nothing
 
-continue :: (Monad m, Monoid b) => m a -> m b
-continue x = x >> pure mempty
-
-resetIf :: Bool -> Maybe a -> Maybe a
-resetIf True _ = Nothing
-resetIf _ x = x
-
 eventHandler :: EventPayload -> GameSystem FinishState
 eventHandler QuitEvent = pure Finished
 eventHandler (KeyboardEvent (KeyboardEventData _ Pressed _ (Keysym _ KC.KeycodeEscape _))) =
@@ -240,7 +170,10 @@ updateBodies = do
     unless (inBounds b) (destroy ety (Proxy @AllComponents))
     pure
       (b & bodyData . bodyPosition +~ timeDelta *^
-       (b ^. bodyData . bodyVelocity))
+       (b ^. bodyData . bodyVelocity) &
+       bodyData .
+       bodyAngle +~
+       (timeDelta ~^ (b ^. bodyData . bodyAngularVelocity)))
 
 newEntity' :: (Set World LoopState c) => c -> GameSystem ()
 newEntity' xs = void $ newEntity xs
@@ -260,18 +193,6 @@ initEcs =
         , _bodyAngularVelocity = Radians 0
         }
     , Image playerImage)
-
-playCatchIO :: MonadIO m => Chunk -> m ()
-playCatchIO c =
-  liftIO
-    (play c `catch` \e ->
-       putStrLn ("play sound failed" <> show (e :: SDLException)))
-
-playChunk :: FilePath -> GameSystem ()
-playChunk fp = do
-  chunkCache <- use loopChunkCache
-  c <- loadChunk chunkCache fp
-  playCatchIO c
 
 maybeShoot :: GameSystem ()
 maybeShoot = do
@@ -312,9 +233,6 @@ simpleLevel =
       }
   ]
 
-(^!) :: MonadIO m => m s -> Getting a s a -> m a
-a ^! b = view b <$> a
-
 spawn :: Spawn -> GameSystem ()
 spawn s =
   newEntity'
@@ -329,9 +247,6 @@ spawn s =
         }
     , Image asteroidMediumImage)
 
-elapsedTime :: GameSystem Millisecond
-elapsedTime = timeDiff <$> getNow <*> use loopGameStart
-
 spawnEnemies :: GameSystem ()
 spawnEnemies = do
   elapsed <- elapsedTime
@@ -343,8 +258,6 @@ spawnEnemies = do
     spawnEnemies' elapsed =
       uncurry (>>) . (mapM_ spawn *** pure) .
       span ((< convertUnit elapsed) . view spawnTimeDiff)
-
-destroyEntity ety = destroy ety (Proxy @AllComponents)
 
 handleCollisions :: GameSystem ()
 handleCollisions =
@@ -362,7 +275,7 @@ handleCollisions =
             now <- getNow
             newEntity'
               ( Animation explosionAnimation now
-              , Lifetime (now `addTime` (explosionAnimation ^. aiTotalDuration))
+              , Lifetime ((explosionAnimation ^. aiTotalDuration) ~^ now)
               , Body $
                 BodyData
                   { _bodyPosition =
@@ -467,16 +380,6 @@ draw = do
       (foundAtlas ^?! atlasFrames . ix atlasName)
       bd
   liftIO (present renderer)
-
-withBackgroundMusic :: IO c -> IO c
-withBackgroundMusic x =
-  bracket
-    (load backgroundMusicPath)
-    free
-    (\music -> playMusic Forever music >> x)
-
-runLoop :: LoopData -> LoopState a -> IO ()
-runLoop initialValue x = void (evalStateT x initialValue)
 
 gameMain :: IO ()
 gameMain =

@@ -26,6 +26,8 @@ executable hspacegame
                      , SG.Game
                      , SG.Cache
                      , SG.ChunkCache
+                     , SG.LoopData
+                     , SG.Util
   build-depends:       base >=4.12 && <4.13
                      , lens
                      , text

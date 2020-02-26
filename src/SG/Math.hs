@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveFunctor #-}
 
@@ -51,9 +53,15 @@ sdlRect = iso toSDL fromSDL
 
 newtype Radians =
   Radians Double
-  deriving (Show, Eq)
+  deriving (Show, Eq, Num)
 
 makeLenses ''Radians
+
+class Act group set where
+  (~^) :: group -> set -> set
+
+instance Act Double Radians where
+  d ~^ (Radians r) = Radians (d * r)
 
 newtype Degrees =
   Degrees

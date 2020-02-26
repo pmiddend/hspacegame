@@ -42,7 +42,7 @@ asteroidVelocity :: V2 Double
 asteroidVelocity = V2 0 200
 
 asteroidAngularVelocity :: Radians
-asteroidAngularVelocity = Radians 0.3
+asteroidAngularVelocity = Radians 1
 
 laserSize :: V2 Int
 laserSize = V2 4 26
@@ -81,7 +81,7 @@ asteroidMediumImage :: ImageIdentifier
 asteroidMediumImage = ImageIdentifier mainAtlasPath "meteorBrown_med1.png"
 
 explosionSize :: V2 Int
-explosionSize = V2 32 32
+explosionSize = V2 100 100
 
 explosionAnimation :: AnimationIdentifier
 explosionAnimation =

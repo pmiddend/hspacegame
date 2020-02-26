@@ -176,12 +176,15 @@ initialPlayerDirection = V2 0 0
 getNow :: MonadIO m => m TimePoint
 getNow = liftIO (getTime Monotonic)
 
-addTime :: TimeUnit a => TimePoint -> a -> TimePoint
-addTime tp duration = tp + fromNanoSecs (toMicroseconds duration * 1000)
+instance TimeUnit a => Act a TimePoint where
+  duration ~^ tp = tp + fromNanoSecs (toMicroseconds duration * 1000)
 
 -- TODO: use "acts" to define algebras on time points and durations
 timeDiff :: TimeUnit a => TimePoint -> TimePoint -> a
 timeDiff a b = fromMicroseconds (toNanoSecs (a `diffTimeSpec` b) `div` 1000)
+
+instance TimeUnit a => Act Integer a where
+  x ~^ duration = fromMicroseconds (x * toMicroseconds duration)
 
 data SpawnType =
   SpawnTypeAsteroidMedium
