@@ -24,10 +24,12 @@ executable hspacegame
                      , SG.Starfield
                      , SG.Atlas
                      , SG.Game
+                     , SG.Font
                      , SG.Cache
                      , SG.ChunkCache
                      , SG.LoopData
                      , SG.Util
+                     , SG.IORefLifted
   build-depends:       base >=4.12 && <4.13
                      , lens
                      , text
@@ -37,6 +39,7 @@ executable hspacegame
                      , directory
                      , mtl
                      , transformers
+                     , lrucache
                      , lifted-base
                      , filepath
                      , containers

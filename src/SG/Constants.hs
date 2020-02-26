@@ -4,6 +4,7 @@ module SG.Constants where
 
 import Data.Time.Units (Millisecond)
 import Linear.V2 (V2(V2))
+import SG.Font
 import SG.Math
 import SG.Types
 import System.FilePath ((</>))
@@ -94,6 +95,11 @@ explosionAnimation =
 
 initialMaxEnergy :: Energy
 initialMaxEnergy = Energy 100
+
+hudFont :: FontDescriptor
+hudFont =
+  FontDescriptor
+    {_fdFont = basePath </> "Bonus" </> "kenvector_future.ttf", _fdSize = 15}
 
 laserEnergy :: Energy
 laserEnergy = Energy 80

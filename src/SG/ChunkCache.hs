@@ -4,7 +4,7 @@ import Control.Monad.IO.Class (MonadIO)
 import SDL.Mixer (Chunk, free, load)
 import SG.Cache
 
-type ChunkCache = Cache Chunk
+type ChunkCache = Cache FilePath Chunk
 
 initChunkCache :: MonadIO m => m ChunkCache
 initChunkCache = initCache load free

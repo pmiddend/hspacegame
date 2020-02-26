@@ -23,16 +23,18 @@ data SizedTexture =
 
 makeLenses ''SizedTexture
 
-type TextureCache = Cache SizedTexture
+type TextureCache = Cache FilePath SizedTexture
+
+textureSize :: MonadIO m => Texture -> m (V2 Int)
+textureSize t = do
+  ti <- liftIO (queryTexture t)
+  pure (V2 (fromIntegral (textureWidth ti)) (fromIntegral (textureHeight ti)))
 
 loadSizedTexture :: MonadIO m => Renderer -> FilePath -> m SizedTexture
 loadSizedTexture renderer fp = do
   t <- liftIO (loadTexture renderer fp)
-  ti <- liftIO (queryTexture t)
-  pure
-    (SizedTexture
-       t
-       (V2 (fromIntegral (textureWidth ti)) (fromIntegral (textureHeight ti))))
+  ts <- textureSize t
+  pure (SizedTexture t ts)
 
 destroySizedTexture :: MonadIO m => SizedTexture -> m ()
 destroySizedTexture = destroyTexture . view stTexture

@@ -47,6 +47,7 @@ import SDL.Event
   , eventPayload
   , pollEvents
   )
+import qualified SDL.Font as Font
 import SDL.Init (InitFlag(InitAudio, InitVideo), initialize, quit)
 import SDL.Input.Keyboard (Keysym(Keysym))
 import qualified SDL.Input.Keyboard.Codes as KC
@@ -67,6 +68,7 @@ import SDL.Video.Renderer (clear, copyEx, fillRect, present, rendererDrawColor)
 import SG.Atlas
 import SG.ChunkCache
 import SG.Constants
+import SG.Font
 import SG.LoopData
 import SG.Math
 import SG.Starfield
@@ -303,6 +305,7 @@ mainLoop = do
       deleteRetirees
       updateBodies
       spawnEnemies
+      replenishEnergy
       handleCollisions
       afterFrame <- getNow
       let timeDiffSecs =
@@ -347,13 +350,44 @@ fillRectColor r c = do
   fillRect renderer (Just (r ^. to (fromIntegral <$>) . sdlRect))
   drawColor $= colorBefore
 
+loadTextCached' :: RenderedText -> GameSystem SizedTexture
+loadTextCached' rt = do
+  fontCache <- use loopFontCache
+  renderer <- use loopRenderer
+  textCache <- use loopTextCache
+  loadTextCached renderer fontCache textCache rt
+
+textSize :: RenderedText -> GameSystem (V2 Int)
+textSize rt = view stSize <$> loadTextCached' rt
+
+drawText :: V2 Int -> RenderedText -> GameSystem ()
+drawText position rt = do
+  st <- loadTextCached' rt
+  renderer <- use loopRenderer
+  copyEx
+    renderer
+    (st ^. stTexture)
+    Nothing
+    (Just (Rectangle position (st ^. stSize) ^. to (fromIntegral <$>) . sdlRect))
+    0
+    Nothing
+    (V2 False False)
+
 drawEnergy :: GameSystem ()
 drawEnergy = do
+  let label =
+        RenderedText
+          { _rtFontDescriptor = hudFont
+          , _rtColor = V4 255 255 255 255
+          , _rtText = "Energy"
+          }
+  labelSize <- textSize label
   let energyWidth = 200
       energyHeight = 20
-      energyPos = V2 5 5
+      energyPos = V2 (5 + 5 + labelSize ^. _x) 5
   currentEnergy <- use loopCurrentEnergy
   maxEnergy <- use loopMaxEnergy
+  drawText (V2 5 5) label
   fillRectColor
     (Rectangle energyPos (V2 energyWidth energyHeight))
     (V4 255 0 0 255)
@@ -382,8 +416,6 @@ draw = do
   textureCache <- use loopTextureCache
   starfield <- use loopStarfield
   drawStarfield renderer atlasCache starfield
-  replenishEnergy
-  drawEnergy
   now <- getNow
   let drawBody tex atlasRect bd =
         copyEx
@@ -411,6 +443,7 @@ draw = do
       (foundAtlas ^. atlasTexture)
       (foundAtlas ^?! atlasFrames . ix atlasName)
       bd
+  drawEnergy
   liftIO (present renderer)
 
 gameMain :: IO ()
@@ -420,24 +453,29 @@ gameMain =
     bracket (createRenderer window (-1) rendererConfig) destroyRenderer $ \renderer ->
       bracket (initTextureCache renderer) destroyTextureCache $ \textureCache ->
         bracket (initAtlasCache textureCache) destroyAtlasCache $ \atlasCache ->
-          withAudio def 1024 $ bracket initChunkCache destroyChunkCache $ \chunkCache -> do
-            rendererLogicalSize renderer $= Just (fromIntegral <$> gameSize)
-            w <- initWorld
-            gameStart <- getNow
-            let initialLoopData =
-                  LoopData
-                    { _loopTextureCache = textureCache
-                    , _loopAtlasCache = atlasCache
-                    , _loopChunkCache = chunkCache
-                    , _loopRenderer = renderer
-                    , _loopDelta = 0
-                    , _loopWorld = w
-                    , _loopStarfield = initStarfield (mkStdGen 0)
-                    , _loopPlayerKeys = initialPlayerDirection
-                    , _loopLevel = simpleLevel
-                    , _loopGameStart = gameStart
-                    , _loopScore = Score 0
-                    , _loopCurrentEnergy = Energy 50
-                    , _loopMaxEnergy = initialMaxEnergy
-                    }
-            runLoop initialLoopData (runWith w (initEcs >> mainLoop))
+          bracket_ Font.initialize Font.quit $
+          bracket initFontCache destroyFontCache $ \fontCache ->
+            bracket initTextCache destroyTextCache $ \textCache ->
+              withAudio def 1024 $ bracket initChunkCache destroyChunkCache $ \chunkCache -> do
+                rendererLogicalSize renderer $= Just (fromIntegral <$> gameSize)
+                w <- initWorld
+                gameStart <- getNow
+                let initialLoopData =
+                      LoopData
+                        { _loopTextureCache = textureCache
+                        , _loopAtlasCache = atlasCache
+                        , _loopChunkCache = chunkCache
+                        , _loopRenderer = renderer
+                        , _loopTextCache = textCache
+                        , _loopFontCache = fontCache
+                        , _loopDelta = 0
+                        , _loopWorld = w
+                        , _loopStarfield = initStarfield (mkStdGen 0)
+                        , _loopPlayerKeys = initialPlayerDirection
+                        , _loopLevel = simpleLevel
+                        , _loopGameStart = gameStart
+                        , _loopScore = Score 0
+                        , _loopCurrentEnergy = Energy 50
+                        , _loopMaxEnergy = initialMaxEnergy
+                        }
+                runLoop initialLoopData (runWith w (initEcs >> mainLoop))

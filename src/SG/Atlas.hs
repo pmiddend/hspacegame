@@ -49,7 +49,7 @@ loadAtlasFrames fp = do
     (fromList
        (contents ^@.. key "frames" . members <. key "frame" . to loadJsonRect))
 
-type AtlasCache = Cache Atlas
+type AtlasCache = Cache FilePath Atlas
 
 initAtlasCache :: MonadIO m => TextureCache -> m AtlasCache
 initAtlasCache textureCache =

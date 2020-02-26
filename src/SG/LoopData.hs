@@ -25,6 +25,7 @@ import SDL.Video (Renderer)
 import SG.Atlas
 import SG.ChunkCache
 import SG.Constants
+import SG.Font
 import SG.Starfield
 import SG.TextureCache
 import SG.Types
@@ -37,6 +38,8 @@ data LoopData =
     , _loopAtlasCache :: AtlasCache
     , _loopChunkCache :: ChunkCache
     , _loopRenderer :: Renderer
+    , _loopTextCache :: TextCache
+    , _loopFontCache :: FontCache
     , _loopDelta :: Double
     , _loopWorld :: World
     , _loopStarfield :: Starfield
