@@ -106,3 +106,6 @@ laserEnergy = Energy 80
 
 energyReplenishPerSecond :: Energy
 energyReplenishPerSecond = Energy 60
+
+hudMargin :: V2 Int
+hudMargin = V2 5 5

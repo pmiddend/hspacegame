@@ -373,21 +373,38 @@ drawText position rt = do
     Nothing
     (V2 False False)
 
+drawScore :: GameSystem ()
+drawScore = do
+  currentScore <- use (loopScore . score)
+  let label =
+        RenderedText
+          { _rtFontDescriptor = hudFont
+          , _rtColor = V4 200 200 200 255
+          , _rtText = "Score: " <> textShow currentScore
+          }
+  labelSize <- textSize label
+  drawText
+    (V2 (gameSize ^. _x - labelSize ^. _x - hudMargin ^. _x) (hudMargin ^. _y))
+    label
+
 drawEnergy :: GameSystem ()
 drawEnergy = do
   let label =
         RenderedText
           { _rtFontDescriptor = hudFont
           , _rtColor = V4 255 255 255 255
-          , _rtText = "Energy"
+          , _rtText = "Energy:"
           }
   labelSize <- textSize label
   let energyWidth = 200
       energyHeight = 20
-      energyPos = V2 (5 + 5 + labelSize ^. _x) 5
+      energyPos =
+        V2
+          ((hudMargin ^. _x) + (hudMargin ^. _x) + labelSize ^. _x)
+          (hudMargin ^. _y)
   currentEnergy <- use loopCurrentEnergy
   maxEnergy <- use loopMaxEnergy
-  drawText (V2 5 5) label
+  drawText hudMargin label
   fillRectColor
     (Rectangle energyPos (V2 energyWidth energyHeight))
     (V4 255 0 0 255)
@@ -444,6 +461,7 @@ draw = do
       (foundAtlas ^?! atlasFrames . ix atlasName)
       bd
   drawEnergy
+  drawScore
   liftIO (present renderer)
 
 gameMain :: IO ()

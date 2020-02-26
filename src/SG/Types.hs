@@ -204,9 +204,11 @@ type Level = [Spawn]
 
 newtype Score =
   Score
-    { _score :: Score
+    { _score :: Int
     }
   deriving (Num, Enum, Integral, Real, Ord, Eq)
+
+makeLenses ''Score
 
 newtype Energy =
   Energy
