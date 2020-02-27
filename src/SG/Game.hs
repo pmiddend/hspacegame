@@ -96,6 +96,7 @@ import SG.LoopData
 import SG.Math
 import SG.Starfield
 import SG.TextureCache
+import SG.Time
 import SG.Types
 import SG.Util
 import System.Random (Random, mkStdGen, randomR)
@@ -230,12 +231,12 @@ spawnMeteorParticle' now center = do
   let velocity = velocitySignum * velocityAmount
   angularVelocity <- randomNormal 0 5
   newEntity'
-    ( Lifetime lifetime (lifetime ~^ now)
+    ( Lifetime lifetime (lifetime `addDuration` now)
     , Image meteorParticleImage
     , EntityColor (V4 255 255 255 255)
     , Body $
       BodyData
-        { _bodyPosition = center - ((fromIntegral <$> V2 size size) ^/ 2.0)
+        { _bodyPosition = center - (floatV2 (V2 size size) ^/ 2.0)
         , _bodySize = V2 size size
         , _bodyAngle = Radians 0
         , _bodyVelocity = velocity
@@ -248,9 +249,7 @@ initEcs =
     ( Player
     , Body $
       BodyData
-        { _bodyPosition =
-            ((fromIntegral <$> gameSize) ^/ 2.0) - (fromIntegral <$> playerSize) ^/
-            2.0
+        { _bodyPosition = (floatV2 gameSize ^/ 2.0) - floatV2 playerSize ^/ 2.0
         , _bodySize = playerSize
         , _bodyAngle = Radians 0
         , _bodyVelocity = V2 0 0
@@ -344,12 +343,11 @@ handleCollisions = do
             let explosionDuration = explosionAnimation ^. aiTotalDuration
             newEntity'
               ( Animation explosionAnimation now
-              , Lifetime explosionDuration (explosionDuration ~^ now)
+              , Lifetime explosionDuration (explosionDuration `addDuration` now)
               , Body $
                 BodyData
                   { _bodyPosition =
-                      bdT ^. bodyCenter - (fromIntegral <$> explosionSize) ^/
-                      2.0
+                      bdT ^. bodyCenter - (floatV2 explosionSize) ^/ 2.0
                   , _bodySize = explosionSize
                   , _bodyAngle = Radians 0
                   , _bodyVelocity = V2 0 0
@@ -510,10 +508,7 @@ drawScore = do
 drawCentered :: RenderedText -> GameSystem ()
 drawCentered label = do
   labelSize <- textSize label
-  drawText
-    (round <$>
-     ((fromIntegral <$> gameSize) ^/ 2 - (fromIntegral <$> labelSize) ^/ 2))
-    label
+  drawText (round <$> (floatV2 gameSize ^/ 2 - floatV2 labelSize ^/ 2)) label
 
 drawEnergy :: GameSystem ()
 drawEnergy = do

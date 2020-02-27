@@ -22,22 +22,15 @@ import Control.Lens
   , makePrisms
   , to
   )
-import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
-import Data.Time.Units (Millisecond, TimeUnit, fromMicroseconds, toMicroseconds)
+import Data.Time.Units (Millisecond)
 import Data.Word (Word8)
 import Linear.V2 (V2(V2))
 import Linear.Vector ((^/))
 import SDL.Vect (V4)
 import SG.Math
-import System.Clock
-  ( Clock(Monotonic)
-  , TimeSpec
-  , diffTimeSpec
-  , fromNanoSecs
-  , getTime
-  , toNanoSecs
-  )
+import SG.Time
+import SG.Util
 
 type Color = V4 Word8
 
@@ -56,10 +49,9 @@ makeLenses ''BodyData
 bodyCenter :: Lens' BodyData (V2 Double)
 bodyCenter =
   lens
-    (\b -> (b ^. bodyPosition) + (fromIntegral <$> (b ^. bodySize)) ^/ 2.0)
+    (\b -> (b ^. bodyPosition) + (b ^. bodySize . floatingV2) ^/ 2.0)
     (\b newCenter ->
-       b & bodyPosition .~
-       (newCenter - (fromIntegral <$> (b ^. bodySize)) ^/ 2.0))
+       b & bodyPosition .~ (newCenter - (b ^. bodySize . floatingV2) ^/ 2.0))
 
 newtype Body =
   Body
@@ -73,8 +65,6 @@ instance Component Body where
 makeLenses ''Body
 
 type Health = Int
-
-type TimePoint = TimeSpec
 
 bodyRectangle :: Lens' Body (Rectangle Double)
 bodyRectangle =
@@ -206,19 +196,6 @@ type PlayerDirection = V2 Int
 
 initialPlayerDirection :: PlayerDirection
 initialPlayerDirection = V2 0 0
-
-getNow :: MonadIO m => m TimePoint
-getNow = liftIO (getTime Monotonic)
-
-instance TimeUnit a => Act a TimePoint where
-  duration ~^ tp = tp + fromNanoSecs (toMicroseconds duration * 1000)
-
--- TODO: use "acts" to define algebras on time points and durations
-timeDiff :: TimeUnit a => TimePoint -> TimePoint -> a
-timeDiff a b = fromMicroseconds (toNanoSecs (a `diffTimeSpec` b) `div` 1000)
-
-instance TimeUnit a => Act Integer a where
-  x ~^ duration = fromMicroseconds (x * toMicroseconds duration)
 
 data SpawnType =
   SpawnTypeAsteroidMedium

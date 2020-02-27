@@ -28,6 +28,7 @@ import SG.Constants
 import SG.Font
 import SG.Starfield
 import SG.TextureCache
+import SG.Time
 import SG.Types
 import System.Random (StdGen)
 

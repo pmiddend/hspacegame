@@ -1,4 +1,3 @@
-* TODO Make collision radiuses smaller
 * TODO Unit system with custom delta
 * TODO Shock wave animation
 * TODO Particle spawners (“space smoke”)
