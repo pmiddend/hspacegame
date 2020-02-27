@@ -6,11 +6,12 @@
 module SG.Game where
 
 import Apecs
-  ( Set
-  , cmap
+  ( Entity(Entity)
+  , Set
   , cmapM
   , cmapM_
   , destroy
+  , get
   , modify
   , newEntity
   , runWith
@@ -40,7 +41,7 @@ import Data.Foldable (fold, for_)
 import Data.Maybe (fromMaybe)
 import Data.Proxy
 import Data.Random.Normal (normal')
-import Data.StateVar (($=), get)
+import qualified Data.StateVar as SV
 import Data.Time.Units
   ( Microsecond
   , Millisecond
@@ -232,7 +233,7 @@ spawnMeteorParticle' now center = do
   angularVelocity <- randomNormal 0 5
   newEntity'
     ( Lifetime lifetime (lifetime `addDuration` now)
-    , Image meteorParticleImage
+    , ImageComponent (StillImage meteorParticleImage)
     , EntityColor (V4 255 255 255 255)
     , Body $
       BodyData
@@ -244,43 +245,44 @@ spawnMeteorParticle' now center = do
         })
 
 initEcs :: GameSystem ()
-initEcs =
-  newEntity'
-    ( Player
-    , Body $
-      BodyData
-        { _bodyPosition = (floatV2 gameSize ^/ 2.0) - floatV2 playerSize ^/ 2.0
-        , _bodySize = playerSize
-        , _bodyAngle = Radians 0
-        , _bodyVelocity = V2 0 0
-        , _bodyAngularVelocity = Radians 0
-        }
-    , Image playerImage)
+initEcs = do
+  p <-
+    newEntity
+      ( Body $
+        BodyData
+          { _bodyPosition =
+              (floatV2 gameSize ^/ 2.0) - floatV2 playerSize ^/ 2.0
+          , _bodySize = playerSize
+          , _bodyAngle = Radians 0
+          , _bodyVelocity = V2 0 0
+          , _bodyAngularVelocity = Radians 0
+          }
+      , ImageComponent (StillImage playerImage))
+  loopPlayer .= p
 
 shoot :: GameSystem ()
 shoot = do
   currentEnergy <- use loopCurrentEnergy
   when (currentEnergy > laserEnergy) $ do
     loopCurrentEnergy -= laserEnergy
-    cmapM_ $ \(Player, Body bd) -> do
-      void $
-        newEntity
-          ( Bullet laserRadius laserDamage
-          , Body $
-            BodyData
-              { _bodyPosition =
-                  V2
-                    (bd ^. bodyPosition . _x +
-                     fromIntegral (bd ^. bodySize . _x) /
-                     2.0)
-                    (bd ^. bodyPosition . _y)
-              , _bodySize = laserSize
-              , _bodyAngle = Radians 0
-              , _bodyVelocity = laserSpeed
-              , _bodyAngularVelocity = Radians 0
-              }
-          , Image laserImage)
-      playChunk pewPath
+    Body bd <- use loopPlayer >>= get
+    playChunk pewPath
+    void $
+      newEntity
+        ( Bullet laserRadius laserDamage
+        , Body $
+          BodyData
+            { _bodyPosition =
+                V2
+                  (bd ^. bodyPosition . _x + fromIntegral (bd ^. bodySize . _x) /
+                   2.0)
+                  (bd ^. bodyPosition . _y)
+            , _bodySize = laserSize
+            , _bodyAngle = Radians 0
+            , _bodyVelocity = laserSpeed
+            , _bodyAngularVelocity = Radians 0
+            }
+        , ImageComponent (StillImage laserImage))
 
 simpleLevel :: Level
 simpleLevel =
@@ -304,7 +306,7 @@ spawn s =
         , _bodyVelocity = asteroidVelocity
         , _bodyAngularVelocity = asteroidAngularVelocity
         }
-    , Image asteroidMediumImage)
+    , ImageComponent (StillImage asteroidMediumImage))
 
 spawnEnemies :: GameSystem ()
 spawnEnemies = do
@@ -320,14 +322,14 @@ spawnEnemies = do
 
 handleCollisions :: GameSystem ()
 handleCollisions = do
+  Body pb <- use loopPlayer >>= get
   cmapM_ $ \(Target tr _, Body bdT) ->
-    cmapM_ $ \(Player, Body pb) ->
-      when
-        (circlesIntersect
-           (Circle (bdT ^. bodyCenter) tr)
-           (Circle (pb ^. bodyCenter) playerRadius)) $ do
-        loopGameState .= GameStateOver
-        playChunk gameOverSoundPath
+    when
+      (circlesIntersect
+         (Circle (bdT ^. bodyCenter) tr)
+         (Circle (pb ^. bodyCenter) playerRadius)) $ do
+      loopGameState .= GameStateOver
+      playChunk gameOverSoundPath
   cmapM_ $ \(Target tr th, Body bdT, etyT) ->
     cmapM_ $ \(Bullet br bd, Body bdB, etyB) ->
       when
@@ -342,12 +344,12 @@ handleCollisions = do
             now <- getNow
             let explosionDuration = explosionAnimation ^. aiTotalDuration
             newEntity'
-              ( Animation explosionAnimation now
+              ( ImageComponent (DynamicImage (Animation explosionAnimation now))
               , Lifetime explosionDuration (explosionDuration `addDuration` now)
               , Body $
                 BodyData
                   { _bodyPosition =
-                      bdT ^. bodyCenter - (floatV2 explosionSize) ^/ 2.0
+                      bdT ^. bodyCenter - floatV2 explosionSize ^/ 2.0
                   , _bodySize = explosionSize
                   , _bodyAngle = Radians 0
                   , _bodyVelocity = V2 0 0
@@ -404,7 +406,8 @@ updatePlayer :: GameSystem ()
 updatePlayer = do
   timeDelta <- use loopDelta
   keys <- use loopPlayerKeys
-  cmap $ \(Player, Body b) ->
+  pe <- use loopPlayer
+  modify pe $ \(Body b) ->
     Body (b & bodyVelocity %~ updatePlayerVelocity timeDelta keys)
 
 determineAnimFrame :: TimePoint -> Animation -> Int
@@ -429,13 +432,13 @@ withNewTextureColor c t f = do
   let V4 r g b a = fromMaybe (V4 255 255 255 255) c
   let texColorMod = textureColorMod t
       texAlphaMod = textureAlphaMod t
-  colorBefore <- get texColorMod
-  alphaBefore <- get texAlphaMod
-  texColorMod $= V3 r g b
-  texAlphaMod $= a
+  colorBefore <- SV.get texColorMod
+  alphaBefore <- SV.get texAlphaMod
+  texColorMod SV.$= V3 r g b
+  texAlphaMod SV.$= a
   result <- f
-  texColorMod $= colorBefore
-  texAlphaMod $= alphaBefore
+  texColorMod SV.$= colorBefore
+  texAlphaMod SV.$= alphaBefore
   pure result
 
 withNewDrawColor :: Maybe Color -> GameSystem a -> GameSystem a
@@ -443,10 +446,10 @@ withNewDrawColor c f = do
   let realColor = fromMaybe (V4 255 255 255 255) c
   renderer <- use loopRenderer
   let drawColor = rendererDrawColor renderer
-  colorBefore <- get drawColor
-  drawColor $= realColor
+  colorBefore <- SV.get drawColor
+  drawColor SV.$= realColor
   result <- f
-  drawColor $= colorBefore
+  drawColor SV.$= colorBefore
   pure result
 
 fillRectColor :: Rectangle Int -> Color -> GameSystem ()
@@ -508,7 +511,9 @@ drawScore = do
 drawCentered :: RenderedText -> GameSystem ()
 drawCentered label = do
   labelSize <- textSize label
-  drawText (round <$> (floatV2 gameSize ^/ 2 - floatV2 labelSize ^/ 2)) label
+  drawText
+    (round <$> (floatV2 @Int @Double gameSize ^/ 2 - floatV2 labelSize ^/ 2))
+    label
 
 drawEnergy :: GameSystem ()
 drawEnergy = do
@@ -577,21 +582,25 @@ draw = do
           (bd ^. bodyAngle . degrees . getDegrees . to realToFrac)
           Nothing
           (V2 False False)
-  cmapM_ $ \(Body bd, a@Animation {}, color) -> do
-    animationTexture <-
-      loadTextureCached textureCache (a ^. animationIdentifier . aiAtlasPath)
-    drawBody
-      animationTexture
-      (determineAnimRect (determineAnimFrame now a) a animationTexture)
-      bd
-      color
-  cmapM_ $ \(Body bd, Image (ImageIdentifier atlasPath atlasName), color) -> do
-    foundAtlas <- loadAtlasCached atlasCache atlasPath
-    drawBody
-      (foundAtlas ^. atlasTexture)
-      (foundAtlas ^?! atlasFrames . ix atlasName)
-      bd
-      color
+  cmapM_ $ \(Body bd, ImageComponent i, color) ->
+    case i of
+      StillImage (ImageIdentifier atlasPath atlasName) -> do
+        foundAtlas <- loadAtlasCached atlasCache atlasPath
+        drawBody
+          (foundAtlas ^. atlasTexture)
+          (foundAtlas ^?! atlasFrames . ix atlasName)
+          bd
+          color
+      DynamicImage a -> do
+        animationTexture <-
+          loadTextureCached
+            textureCache
+            (a ^. animationIdentifier . aiAtlasPath)
+        drawBody
+          animationTexture
+          (determineAnimRect (determineAnimFrame now a) a animationTexture)
+          bd
+          color
   drawEnergy
   drawScore
   whenGameOver $
@@ -614,8 +623,9 @@ gameMain =
           bracket initFontCache destroyFontCache $ \fontCache ->
             bracket initTextCache destroyTextCache $ \textCache ->
               withAudio def 1024 $ bracket initChunkCache destroyChunkCache $ \chunkCache -> do
-                rendererLogicalSize renderer $= Just (fromIntegral <$> gameSize)
-                rendererDrawBlendMode renderer $= BlendAlphaBlend
+                rendererLogicalSize renderer SV.$=
+                  Just (fromIntegral <$> gameSize)
+                rendererDrawBlendMode renderer SV.$= BlendAlphaBlend
                 w <- initWorld
                 gameStart <- getNow
                 let initialLoopData =
@@ -637,5 +647,6 @@ gameMain =
                         , _loopCurrentEnergy = Energy 50
                         , _loopMaxEnergy = initialMaxEnergy
                         , _loopGameState = GameStateRunning
+                        , _loopPlayer = Entity (-1)
                         }
                 runLoop initialLoopData (runWith w (initEcs >> mainLoop))

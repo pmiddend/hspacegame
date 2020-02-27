@@ -86,13 +86,6 @@ data ImageIdentifier =
 
 makeLenses ''ImageIdentifier
 
-newtype Image =
-  Image ImageIdentifier
-  deriving (Show)
-
-instance Component Image where
-  type Storage Image = Map Image
-
 data AnimationIdentifier =
   AnimationIdentifier
     { _aiAtlasPath :: FilePath
@@ -117,8 +110,17 @@ data Animation =
 
 makeLenses ''Animation
 
-instance Component Animation where
-  type Storage Animation = Map Animation
+data Image
+  = StillImage ImageIdentifier
+  | DynamicImage Animation
+  deriving (Show)
+
+newtype ImageComponent =
+  ImageComponent Image
+  deriving (Show)
+
+instance Component ImageComponent where
+  type Storage ImageComponent = Map ImageComponent
 
 data Target =
   Target
@@ -156,13 +158,6 @@ makeLenses ''Lifetime
 instance Component Lifetime where
   type Storage Lifetime = Map Lifetime
 
-data Player =
-  Player
-  deriving (Show)
-
-instance Component Player where
-  type Storage Player = Unique Player
-
 newtype EntityColor =
   EntityColor
     { _entityColor :: Color
@@ -176,17 +171,9 @@ instance Component EntityColor where
 
 makeWorld
   "World"
-  [ ''Body
-  , ''Player
-  , ''Target
-  , ''Bullet
-  , ''Image
-  , ''Animation
-  , ''Lifetime
-  , ''EntityColor
-  ]
+  [''Body, ''Target, ''Bullet, ''ImageComponent, ''Lifetime, ''EntityColor]
 
-type AllComponents = (Body, Player, Target, Bullet, Image, Animation)
+type AllComponents = (Body, Target, Bullet, ImageComponent)
 
 type System' a = System World a
 

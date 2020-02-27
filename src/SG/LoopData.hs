@@ -8,7 +8,7 @@
 
 module SG.LoopData where
 
-import Apecs (SystemT, destroy)
+import Apecs (Entity, SystemT, destroy)
 import Control.Exception (bracket)
 import Control.Exception.Lifted (catch)
 import Control.Lens (makeLenses, use)
@@ -53,6 +53,7 @@ data LoopData =
     , _loopCurrentEnergy :: Energy
     , _loopMaxEnergy :: Energy
     , _loopGameState :: GameState
+    , _loopPlayer :: Entity
     }
 
 makeLenses ''LoopData
