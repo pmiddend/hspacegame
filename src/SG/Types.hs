@@ -23,7 +23,6 @@ import Control.Lens
   , to
   )
 import Data.Text (Text)
-import Data.Time.Units (Millisecond)
 import Data.Word (Word8)
 import Linear.V2 (V2(V2))
 import Linear.Vector ((^/))
@@ -119,15 +118,15 @@ data AnimationIdentifier =
     { _aiAtlasPath :: FilePath
     , _aiFrameCount :: Int
     , _aiFrameSize :: V2 Int
-    , _aiFrameDuration :: Millisecond
+    , _aiFrameDuration :: Duration
     }
   deriving (Show)
 
 makeLenses ''AnimationIdentifier
 
-aiTotalDuration :: Getter AnimationIdentifier Millisecond
+aiTotalDuration :: Getter AnimationIdentifier Duration
 aiTotalDuration =
-  to (\ai -> fromIntegral (ai ^. aiFrameCount) * (ai ^. aiFrameDuration))
+  to (\ai -> (ai ^. aiFrameCount . to fromIntegral) @* (ai ^. aiFrameDuration))
 
 data Animation =
   Animation
@@ -181,7 +180,7 @@ data Ramp
 
 data Lifetime =
   Lifetime
-    { _lifetimeTotal :: Millisecond
+    { _lifetimeTotal :: Duration
     , _lifetimeEnd :: TimePoint
     , _lifetimeRamp :: Maybe Ramp
     }
@@ -249,7 +248,7 @@ data SpawnType
 
 data Spawn =
   Spawn
-    { _spawnTimeDiff :: Millisecond
+    { _spawnTimeDiff :: Duration
     , _spawnType :: SpawnType
     }
 
@@ -281,7 +280,7 @@ makePrisms ''GameState
 data Hint =
   Hint
     { _hintText :: TextDescriptor
-    , _hintDuration :: Millisecond
+    , _hintDuration :: Duration
     , _hintEnd :: TimePoint
     }
 

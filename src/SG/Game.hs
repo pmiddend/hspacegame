@@ -44,13 +44,6 @@ import Data.Maybe (fromMaybe)
 import Data.Proxy
 import Data.Random.Normal (normal')
 import qualified Data.StateVar as SV
-import Data.Time.Units
-  ( Microsecond
-  , Millisecond
-  , TimeUnit
-  , convertUnit
-  , toMicroseconds
-  )
 import Linear.V2 (V2(V2), _x, _y)
 import Linear.Vector ((*^), (^/))
 import Prelude hiding (lookup)
@@ -225,16 +218,17 @@ randomPair (x, y) = do
 
 spawnMeteorParticle' :: TimePoint -> V2 Double -> GameSystem ()
 spawnMeteorParticle' now center = do
-  lifetime <-
-    fromIntegral @Int @Millisecond . round @Double @Int <$>
-    randomNormal 500 1500
+  lifetime <- round @Double @Integer <$> randomNormal @Double 500 1500
   size <- randomUniform 8 80
   velocitySignum <- V2 <$> randomPair (-1, 1) <*> randomPair (-1, 1)
   velocityAmount <- V2 <$> randomUniform 10 300 <*> randomUniform 10 300
   let velocity = velocitySignum * velocityAmount
   angularVelocity <- randomNormal 0 5
   newEntity'
-    ( Lifetime lifetime (lifetime `addDuration` now) (Just (LinearFromTo 1 0))
+    ( Lifetime
+        (milliseconds lifetime)
+        (milliseconds lifetime $+ now)
+        (Just (LinearFromTo 1 0))
     , ImageComponent (StillImage meteorParticleImage)
     , ColorComponent (V4 255 255 255 255)
     , BodyComponent $
@@ -289,8 +283,8 @@ shoot = do
 spawn :: Spawn -> GameSystem ()
 spawn (Spawn _ (SpawnTypeHint td)) = do
   now <- getNow
-  let dur = 2000 :: Millisecond
-  loopHint .= Just (Hint td dur (dur `addDuration` now))
+  let dur = seconds @Integer 2
+  loopHint .= Just (Hint td dur (dur $+ now))
 spawn (Spawn _ (SpawnTypeMeteor meteorType pos)) =
   newEntity'
     ( Target (meteorType ^. meteorRadius) (meteorType ^. meteorHealth)
@@ -311,10 +305,10 @@ spawnEnemies = do
   remainingLevel <- spawnEnemies' elapsed currentLevel
   loopLevel .= remainingLevel
   where
-    spawnEnemies' :: TimeUnit a => a -> [Spawn] -> GameSystem [Spawn]
+    spawnEnemies' :: Duration -> [Spawn] -> GameSystem [Spawn]
     spawnEnemies' elapsed =
       uncurry (>>) . (mapM_ spawn *** pure) .
-      span ((< convertUnit elapsed) . view spawnTimeDiff)
+      span ((< elapsed) . view spawnTimeDiff)
 
 handleCollisions :: GameSystem ()
 handleCollisions = do
@@ -343,7 +337,7 @@ handleCollisions = do
               ( ImageComponent (DynamicImage (Animation explosionAnimation now))
               , Lifetime
                   explosionDuration
-                  (explosionDuration `addDuration` now)
+                  (explosionDuration $+ now)
                   (Just (LinearFromTo 1 0))
               , BodyComponent $
                 BodyData
@@ -361,7 +355,7 @@ handleCollisions = do
             playChunk collisionSoundPath
             set etyT (Target tr newHealth)
 
-calculateRamp :: TimePoint -> TimePoint -> Millisecond -> Maybe Ramp -> Double
+calculateRamp :: TimePoint -> TimePoint -> Duration -> Maybe Ramp -> Double
 calculateRamp now end _ Nothing =
   if now > end
     then -1
@@ -369,16 +363,14 @@ calculateRamp now end _ Nothing =
 calculateRamp now end dur (Just (LinearFromTo from' to')) =
   if now > end
     then -1
-    else let t =
-               1 - fromIntegral @Millisecond @Double (end `timeDiff` now) /
-               fromIntegral dur
+    else let t :: Double
+             t = 1 - ((end `timeDiff` now) `durationDiv` dur)
           in lerp from' to' t
 calculateRamp now end dur (Just (UpThenDown upDur downDur from' to')) =
   if now > end
     then -1
-    else let t =
-               1 - fromIntegral @Millisecond @Double (end `timeDiff` now) /
-               fromIntegral dur
+    else let t :: Double
+             t = 1 - ((end `timeDiff` now) `durationDiv` dur)
           in if t < upDur
                then lerp from' to' (t / upDur)
                else if t > (1 - downDur)
@@ -388,8 +380,8 @@ calculateRamp now end dur (Just (UpThenDown upDur downDur from' to')) =
 deleteRetirees :: GameSystem ()
 deleteRetirees = do
   now <- getNow
-  cmapM_ $ \(Lifetime duration ltEnd ramp, ety) -> do
-    let lifetimePercent = calculateRamp now ltEnd duration ramp
+  cmapM_ $ \(Lifetime dur ltEnd ramp, ety) -> do
+    let lifetimePercent = calculateRamp now ltEnd dur ramp
     if lifetimePercent <= 0
       then destroyEntity ety
       else let modColor (Just (ColorComponent (V4 r g b _))) =
@@ -420,10 +412,9 @@ mainLoop = do
         replenishEnergy
         handleCollisions
       afterFrame <- getNow
-      let timeDiffSecs =
-            fromIntegral
-              (toMicroseconds (afterFrame `timeDiff` beforeFrame :: Microsecond)) /
-            1000000.0
+      let timeDiffSecs :: Double
+          timeDiffSecs =
+            (afterFrame `timeDiff` beforeFrame) `durationDiv` seconds @Integer 1
       loopDelta .= timeDiffSecs
       delta <- use loopDelta
       loopStarfield %= stepStarfield delta
@@ -440,13 +431,12 @@ updatePlayer = do
 
 determineAnimFrame :: TimePoint -> Animation -> Int
 determineAnimFrame now anim =
-  let elapsed :: Microsecond
+  let elapsed :: Duration
       elapsed = now `timeDiff` (anim ^. animationStart)
-      duration :: Millisecond
-      duration = anim ^. animationIdentifier . aiFrameDuration
+      dur :: Duration
+      dur = anim ^. animationIdentifier . aiFrameDuration
       frameCount = anim ^. animationIdentifier . aiFrameCount
-   in fromIntegral (toMicroseconds elapsed `div` toMicroseconds duration) `mod`
-      frameCount
+   in fromIntegral (elapsed `durationDivInt` dur) `mod` frameCount
 
 determineAnimRect :: Int -> Animation -> SizedTexture -> Rectangle Int
 determineAnimRect frame anim texture =

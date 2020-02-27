@@ -57,7 +57,7 @@ executable hspacegame
                      , clock
                      , aeson
                      , lens-aeson
-                     , time-units
+                     , composition
   ghc-options: -threaded -Wall -Wno-orphans
   default-language:    Haskell2010
   build-tools:         hlint

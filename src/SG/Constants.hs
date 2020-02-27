@@ -1,17 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 module SG.Constants where
 
 import Data.Text (Text)
-import Data.Time.Units (Millisecond)
 import Linear.V2 (V2(V2))
 import SDL.Vect (V4(V4))
 import SG.Math
+import SG.Time
 import SG.Types
 import System.FilePath ((</>))
 
-playerShootingFrequency :: Millisecond
-playerShootingFrequency = 500 :: Millisecond
+playerShootingFrequency :: Duration
+playerShootingFrequency = milliseconds @Integer 500
 
 gameSize :: V2 Int
 gameSize = V2 1024 768
@@ -126,8 +127,8 @@ meteorGreyBig3 =
 explosionSize :: V2 Int
 explosionSize = V2 100 100
 
-meteorParticleLifetime :: Millisecond
-meteorParticleLifetime = 1000
+meteorParticleLifetime :: Duration
+meteorParticleLifetime = seconds @Integer 1
 
 meteorParticleSize :: V2 Int
 meteorParticleSize = V2 16 16
@@ -141,7 +142,7 @@ explosionAnimation =
     { _aiAtlasPath = imagePath </> "explosion.png"
     , _aiFrameCount = 32
     , _aiFrameSize = V2 64 64
-    , _aiFrameDuration = 30
+    , _aiFrameDuration = milliseconds @Integer 30
     }
 
 initialMaxEnergy :: Energy

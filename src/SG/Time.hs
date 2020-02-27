@@ -1,26 +1,60 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module SG.Time where
 
+import Control.Lens (makeLenses)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.Time.Units (TimeUnit, fromMicroseconds, toMicroseconds)
-import System.Clock
-  ( Clock(Monotonic)
-  , TimeSpec
-  , diffTimeSpec
-  , fromNanoSecs
-  , getTime
-  , toNanoSecs
-  )
+import Data.Ratio ((%))
+import System.Clock (Clock(Monotonic), getTime, toNanoSecs)
 
-type TimePoint = TimeSpec
+newtype Duration =
+  Duration
+    { _duration :: Integer
+    }
+  deriving (Show, Eq, Ord)
+
+makeLenses ''Duration
+
+nanoseconds :: Integral a => a -> Duration
+nanoseconds = Duration . fromIntegral
+
+microseconds :: Integral a => a -> Duration
+microseconds = Duration . fromIntegral . (* 1000)
+
+milliseconds :: Integral a => a -> Duration
+milliseconds = Duration . fromIntegral . (* 1000000)
+
+seconds :: Integral a => a -> Duration
+seconds = Duration . fromIntegral . (* 1000000000)
+
+newtype TimePoint =
+  TimePoint
+    { _timePoint :: Duration
+    }
+  deriving (Eq, Ord, Show)
+
+makeLenses ''TimePoint
 
 getNow :: MonadIO m => m TimePoint
-getNow = liftIO (getTime Monotonic)
+getNow = liftIO (TimePoint . nanoseconds . toNanoSecs <$> getTime Monotonic)
 
-addDuration :: TimeUnit a => a -> TimePoint -> TimePoint
-addDuration duration tp = tp + fromNanoSecs (toMicroseconds duration * 1000)
+(@*) :: Integral a => a -> Duration -> Duration
+a @* (Duration x) = Duration (fromIntegral a * x)
 
-timeDiff :: TimeUnit a => TimePoint -> TimePoint -> a
-timeDiff a b = fromMicroseconds (toNanoSecs (a `diffTimeSpec` b) `div` 1000)
+(@+) :: Integral a => a -> Duration -> Duration
+a @+ (Duration x) = Duration (fromIntegral a + x)
 
-multiplyDuration :: TimeUnit a => Integer -> a -> a
-multiplyDuration x duration = fromMicroseconds (x * toMicroseconds duration)
+timeDiff :: TimePoint -> TimePoint -> Duration
+timeDiff (TimePoint (Duration x)) (TimePoint (Duration y)) = nanoseconds (x - y)
+
+durationDiv :: Duration -> Duration -> Double
+durationDiv (Duration a) (Duration b) = fromRational (a % b)
+
+durationDivInt :: Duration -> Duration -> Integer
+durationDivInt (Duration a) (Duration b) = a `div` b
+
+($+) :: Duration -> TimePoint -> TimePoint
+($+) (Duration d) (TimePoint (Duration e)) = TimePoint (nanoseconds (d + e))

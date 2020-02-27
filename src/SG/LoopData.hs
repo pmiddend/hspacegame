@@ -17,7 +17,6 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State.Strict (MonadState, StateT, evalStateT, get, put)
 import Control.Monad.Trans.Class (lift)
 import Data.Proxy
-import Data.Time.Units (Millisecond)
 import Linear.V2 (V2)
 import SDL.Exception (SDLException)
 import SDL.Mixer (Chunk, pattern Forever, free, load, play, playMusic)
@@ -80,7 +79,7 @@ playChunk fp = do
   c <- loadChunk chunkCache fp
   playCatchIO c
 
-elapsedTime :: GameSystem Millisecond
+elapsedTime :: GameSystem Duration
 elapsedTime = timeDiff <$> getNow <*> use loopGameStart
 
 destroyEntity ety = destroy ety (Proxy @AllComponents)
