@@ -310,22 +310,24 @@ simpleLevel =
       { _spawnTimeDiff = 4000 :: Millisecond
       , _spawnType =
           SpawnTypeMeteor
-            meteorGreyBig1
-            (V2 600 (fromIntegral (meteorGreyBig1 ^. meteorSize . _y . negated)))
+            meteorBrownBig1
+            (V2
+               600
+               (fromIntegral (meteorBrownBig1 ^. meteorSize . _y . negated)))
       }
   , Spawn
       { _spawnTimeDiff = 5000 :: Millisecond
       , _spawnType =
           SpawnTypeMeteor
-            meteorGreyBig1
-            (V2 100 (fromIntegral (meteorGreyBig1 ^. meteorSize . _y . negated)))
+            meteorGreyBig2
+            (V2 100 (fromIntegral (meteorGreyBig2 ^. meteorSize . _y . negated)))
       }
   , Spawn
       { _spawnTimeDiff = 6000 :: Millisecond
       , _spawnType =
           SpawnTypeMeteor
-            meteorGreyBig1
-            (V2 800 (fromIntegral (meteorGreyBig1 ^. meteorSize . _y . negated)))
+            meteorGreyBig3
+            (V2 800 (fromIntegral (meteorGreyBig3 ^. meteorSize . _y . negated)))
       }
   , Spawn
       { _spawnTimeDiff = 11000 :: Millisecond
@@ -364,7 +366,7 @@ spawn (Spawn _ (SpawnTypeMeteor meteorType pos)) = do
         , _bodyVelocity = meteorType ^. meteorVelocity
         , _bodyAngularVelocity = meteorType ^. meteorAngularVelocity
         }
-    , ImageComponent (StillImage (meteorType ^. meteorImage)))
+    , ImageComponent (StillImage (traceShowId $ meteorType ^. meteorImage)))
 
 spawnEnemies :: GameSystem ()
 spawnEnemies = do

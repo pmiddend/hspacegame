@@ -83,6 +83,16 @@ meteorBrownMed1 =
     (Radians 1)
     100
 
+meteorBrownBig1 :: MeteorType
+meteorBrownBig1 =
+  MeteorType
+    (mainAtlasImage "meteorBrown_big1.png")
+    (V2 101 84)
+    42
+    (V2 0 100)
+    (Radians (-0.2))
+    1000
+
 meteorGreyBig1 :: MeteorType
 meteorGreyBig1 =
   MeteorType
@@ -91,6 +101,26 @@ meteorGreyBig1 =
     42
     (V2 0 100)
     (Radians 0.2)
+    1000
+
+meteorGreyBig2 :: MeteorType
+meteorGreyBig2 =
+  MeteorType
+    (mainAtlasImage "meteorGrey_big2.png")
+    (V2 128 98)
+    45
+    (V2 0 100)
+    (Radians 0.3)
+    1000
+
+meteorGreyBig3 :: MeteorType
+meteorGreyBig3 =
+  MeteorType
+    (mainAtlasImage "meteorGrey_big3.png")
+    (V2 89 82)
+    39
+    (V2 0 100)
+    (Radians (-0.4))
     1000
 
 explosionSize :: V2 Int
