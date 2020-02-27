@@ -300,16 +300,51 @@ simpleLevel =
                })
       }
   , Spawn
-      { _spawnTimeDiff = 10000 :: Millisecond
+      { _spawnTimeDiff = 3000 :: Millisecond
       , _spawnType =
-          SpawnTypeAsteroidMedium
-            (V2 500 (fromIntegral (asteroidMediumSize ^. _y . negated)))
+          SpawnTypeMeteor
+            meteorGreyBig1
+            (V2 440 (fromIntegral (meteorGreyBig1 ^. meteorSize . _y . negated)))
       }
   , Spawn
-      { _spawnTimeDiff = 20000 :: Millisecond
+      { _spawnTimeDiff = 4000 :: Millisecond
       , _spawnType =
-          SpawnTypeAsteroidMedium
-            (V2 500 (fromIntegral (asteroidMediumSize ^. _y . negated)))
+          SpawnTypeMeteor
+            meteorGreyBig1
+            (V2 600 (fromIntegral (meteorGreyBig1 ^. meteorSize . _y . negated)))
+      }
+  , Spawn
+      { _spawnTimeDiff = 5000 :: Millisecond
+      , _spawnType =
+          SpawnTypeMeteor
+            meteorGreyBig1
+            (V2 100 (fromIntegral (meteorGreyBig1 ^. meteorSize . _y . negated)))
+      }
+  , Spawn
+      { _spawnTimeDiff = 6000 :: Millisecond
+      , _spawnType =
+          SpawnTypeMeteor
+            meteorGreyBig1
+            (V2 800 (fromIntegral (meteorGreyBig1 ^. meteorSize . _y . negated)))
+      }
+  , Spawn
+      { _spawnTimeDiff = 11000 :: Millisecond
+      , _spawnType =
+          SpawnTypeHint
+            (TextDescriptor
+               { _rtFontDescriptor = hudFont
+               , _rtColor = hintTextColor
+               , _rtText = "use [SPACE] to shoot - watch your energy!"
+               })
+      }
+  , Spawn
+      { _spawnTimeDiff = 12000 :: Millisecond
+      , _spawnType =
+          SpawnTypeMeteor
+            meteorBrownMed1
+            (V2
+               500
+               (fromIntegral (meteorBrownMed1 ^. meteorSize . _y . negated)))
       }
   ]
 
@@ -318,18 +353,18 @@ spawn (Spawn _ (SpawnTypeHint td)) = do
   now <- getNow
   let dur = 2000 :: Millisecond
   loopHint .= Just (Hint td dur (dur `addDuration` now))
-spawn (Spawn _ (SpawnTypeAsteroidMedium pos)) =
+spawn (Spawn _ (SpawnTypeMeteor meteorType pos)) = do
   newEntity'
-    ( Target asteroidMediumRadius asteroidMediumHealth
+    ( Target (meteorType ^. meteorRadius) (meteorType ^. meteorHealth)
     , BodyComponent $
       BodyData
         { _bodyPosition = pos
-        , _bodySize = asteroidMediumSize
+        , _bodySize = meteorType ^. meteorSize
         , _bodyAngle = Radians 0
-        , _bodyVelocity = asteroidVelocity
-        , _bodyAngularVelocity = asteroidAngularVelocity
+        , _bodyVelocity = meteorType ^. meteorVelocity
+        , _bodyAngularVelocity = meteorType ^. meteorAngularVelocity
         }
-    , ImageComponent (StillImage asteroidMediumImage))
+    , ImageComponent (StillImage (meteorType ^. meteorImage)))
 
 spawnEnemies :: GameSystem ()
 spawnEnemies = do
@@ -693,10 +728,18 @@ drawHint = do
                now
                (hint ^. hintEnd)
                (hint ^. hintDuration)
+               (Just (UpThenDown 0.2 0.2 0 128)))
+        maf =
+          round
+            @Double
+            (calculateRamp
+               now
+               (hint ^. hintEnd)
+               (hint ^. hintDuration)
                (Just (UpThenDown 0.2 0.2 0 255)))
         modulatedColor = V4 r g b ma
     fillRectColor hintRect modulatedColor
-    drawCenteredIn hintRect (hint ^. hintText & rtColor . _4 .~ ma)
+    drawCenteredIn hintRect (hint ^. hintText & rtColor . _4 .~ maf)
 
 gameMain :: IO ()
 gameMain =

@@ -231,8 +231,20 @@ type PlayerDirection = V2 Int
 initialPlayerDirection :: PlayerDirection
 initialPlayerDirection = V2 0 0
 
+data MeteorType =
+  MeteorType
+    { _meteorImage :: ImageIdentifier
+    , _meteorSize :: V2 Int
+    , _meteorRadius :: Double
+    , _meteorVelocity :: V2 Double
+    , _meteorAngularVelocity :: Radians
+    , _meteorHealth :: Health
+    }
+
+makeLenses ''MeteorType
+
 data SpawnType
-  = SpawnTypeAsteroidMedium (V2 Double)
+  = SpawnTypeMeteor MeteorType (V2 Double)
   | SpawnTypeHint TextDescriptor
 
 data Spawn =

@@ -2,6 +2,7 @@
 
 module SG.Constants where
 
+import Data.Text (Text)
 import Data.Time.Units (Millisecond)
 import Linear.V2 (V2(V2))
 import SDL.Vect (V4(V4))
@@ -27,23 +28,8 @@ gameRect = Rectangle (V2 0 0) gameSize
 playerSize :: V2 Int
 playerSize = V2 50 32
 
-asteroidMediumSize :: V2 Int
-asteroidMediumSize = V2 42 42
-
-asteroidMediumRadius :: Double
-asteroidMediumRadius = 18.0
-
-asteroidMediumHealth :: Health
-asteroidMediumHealth = 100
-
 laserDamage :: Health
 laserDamage = 50
-
-asteroidVelocity :: V2 Double
-asteroidVelocity = V2 0 200
-
-asteroidAngularVelocity :: Radians
-asteroidAngularVelocity = Radians 1
 
 laserSize :: V2 Int
 laserSize = V2 4 26
@@ -84,8 +70,28 @@ playerImage = ImageIdentifier mainAtlasPath "playerShip1_blue.png"
 laserImage :: ImageIdentifier
 laserImage = ImageIdentifier mainAtlasPath "laserBlue01.png"
 
-asteroidMediumImage :: ImageIdentifier
-asteroidMediumImage = ImageIdentifier mainAtlasPath "meteorBrown_med1.png"
+mainAtlasImage :: Text -> ImageIdentifier
+mainAtlasImage = ImageIdentifier mainAtlasPath
+
+meteorBrownMed1 :: MeteorType
+meteorBrownMed1 =
+  MeteorType
+    (mainAtlasImage "meteorBrown_med1.png")
+    (V2 43 43)
+    20
+    (V2 0 200)
+    (Radians 1)
+    100
+
+meteorGreyBig1 :: MeteorType
+meteorGreyBig1 =
+  MeteorType
+    (mainAtlasImage "meteorGrey_big1.png")
+    (V2 101 84)
+    42
+    (V2 0 100)
+    (Radians 0.2)
+    1000
 
 explosionSize :: V2 Int
 explosionSize = V2 100 100
