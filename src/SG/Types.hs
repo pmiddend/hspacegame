@@ -11,7 +11,17 @@
 module SG.Types where
 
 import Apecs
-import Control.Lens (Getter, Lens', (&), (.~), (^.), lens, makeLenses, to)
+import Control.Lens
+  ( Getter
+  , Lens'
+  , (&)
+  , (.~)
+  , (^.)
+  , lens
+  , makeLenses
+  , makePrisms
+  , to
+  )
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
 import Data.Time.Units (Millisecond, TimeUnit, fromMicroseconds, toMicroseconds)
@@ -237,3 +247,10 @@ newtype Energy =
     { _energy :: Double
     }
   deriving (Num, Enum, Ord, Eq, Real, RealFrac, Fractional, Floating, RealFloat)
+
+data GameState
+  = GameStateRunning
+  | GameStateOver
+  deriving (Show, Eq)
+
+makePrisms ''GameState

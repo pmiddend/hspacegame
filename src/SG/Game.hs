@@ -151,12 +151,22 @@ keyCodeToPlayerDirection c KC.KeycodeS =
        else -1)
 keyCodeToPlayerDirection _ _ = Nothing
 
+whenGameOver :: GameSystem () -> GameSystem ()
+whenGameOver a = do
+  state <- use loopGameState
+  when (state == GameStateOver) a
+
+whenGameRunning :: GameSystem () -> GameSystem ()
+whenGameRunning a = do
+  state <- use loopGameState
+  when (state == GameStateRunning) a
+
 eventHandler :: EventPayload -> GameSystem FinishState
 eventHandler QuitEvent = pure Finished
 eventHandler (KeyboardEvent (KeyboardEventData _ Pressed _ (Keysym _ KC.KeycodeEscape _))) =
   pure Finished
 eventHandler (KeyboardEvent (KeyboardEventData _ Pressed False (Keysym _ KC.KeycodeSpace _))) =
-  continue shoot
+  continue (whenGameRunning shoot)
 eventHandler (KeyboardEvent (KeyboardEventData _ keyState False (Keysym _ kc _))) =
   continue $ for_ (keyCodeToPlayerDirection keyState kc) (loopPlayerKeys +=)
 eventHandler _ = continue (pure ())
@@ -310,7 +320,15 @@ spawnEnemies = do
       span ((< convertUnit elapsed) . view spawnTimeDiff)
 
 handleCollisions :: GameSystem ()
-handleCollisions =
+handleCollisions = do
+  cmapM_ $ \(Target tr _, Body bdT) ->
+    cmapM_ $ \(Player, Body pb) ->
+      when
+        (circlesIntersect
+           (Circle (bdT ^. bodyCenter) tr)
+           (Circle (pb ^. bodyCenter) playerRadius)) $ do
+        loopGameState .= GameStateOver
+        playChunk gameOverSoundPath
   cmapM_ $ \(Target tr th, Body bdT, etyT) ->
     cmapM_ $ \(Bullet br bd, Body bdB, etyB) ->
       when
@@ -367,12 +385,13 @@ mainLoop = do
     Finished -> pure ()
     NotFinished -> do
       draw
-      updatePlayer
-      deleteRetirees
-      updateBodies
-      spawnEnemies
-      replenishEnergy
-      handleCollisions
+      whenGameRunning $ do
+        updatePlayer
+        deleteRetirees
+        updateBodies
+        spawnEnemies
+        replenishEnergy
+        handleCollisions
       afterFrame <- getNow
       let timeDiffSecs =
             fromIntegral
@@ -488,6 +507,14 @@ drawScore = do
     (V2 (gameSize ^. _x - labelSize ^. _x - hudMargin ^. _x) (hudMargin ^. _y))
     label
 
+drawCentered :: RenderedText -> GameSystem ()
+drawCentered label = do
+  labelSize <- textSize label
+  drawText
+    (round <$>
+     ((fromIntegral <$> gameSize) ^/ 2 - (fromIntegral <$> labelSize) ^/ 2))
+    label
+
 drawEnergy :: GameSystem ()
 drawEnergy = do
   let label =
@@ -572,6 +599,13 @@ draw = do
       color
   drawEnergy
   drawScore
+  whenGameOver $
+    drawCentered
+      (RenderedText
+         { _rtFontDescriptor = announceFont
+         , _rtColor = V4 255 255 255 255
+         , _rtText = "Game Over"
+         })
   liftIO (present renderer)
 
 gameMain :: IO ()
@@ -607,5 +641,6 @@ gameMain =
                         , _loopScore = Score 0
                         , _loopCurrentEnergy = Energy 50
                         , _loopMaxEnergy = initialMaxEnergy
+                        , _loopGameState = GameStateRunning
                         }
                 runLoop initialLoopData (runWith w (initEcs >> mainLoop))

@@ -51,6 +51,7 @@ data LoopData =
     , _loopScore :: Score
     , _loopCurrentEnergy :: Energy
     , _loopMaxEnergy :: Energy
+    , _loopGameState :: GameState
     }
 
 makeLenses ''LoopData

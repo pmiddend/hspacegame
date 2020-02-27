@@ -75,6 +75,9 @@ explosionSoundPath = basePath </> "explosion-short.wav"
 collisionSoundPath :: FilePath
 collisionSoundPath = basePath </> "collision.wav"
 
+gameOverSoundPath :: FilePath
+gameOverSoundPath = basePath </> "gameover.wav"
+
 playerImage :: ImageIdentifier
 playerImage = ImageIdentifier mainAtlasPath "playerShip1_blue.png"
 
@@ -113,6 +116,11 @@ hudFont =
   FontDescriptor
     {_fdFont = basePath </> "Bonus" </> "kenvector_future.ttf", _fdSize = 15}
 
+announceFont :: FontDescriptor
+announceFont =
+  FontDescriptor
+    {_fdFont = basePath </> "Bonus" </> "kenvector_future.ttf", _fdSize = 65}
+
 laserEnergy :: Energy
 laserEnergy = Energy 80
 
@@ -121,3 +129,6 @@ energyReplenishPerSecond = Energy 60
 
 hudMargin :: V2 Int
 hudMargin = V2 5 5
+
+playerRadius :: Double
+playerRadius = 32.0
