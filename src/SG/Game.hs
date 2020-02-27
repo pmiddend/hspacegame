@@ -51,10 +51,8 @@ import Data.Time.Units
   , convertUnit
   , toMicroseconds
   )
-import Debug.Trace (traceShowId)
 import Linear.V2 (V2(V2), _x, _y)
 import Linear.Vector ((*^), (^/))
-import Numeric.Lens (negated)
 import Prelude hiding (lookup)
 import SDL.Event
   ( EventPayload(KeyboardEvent, QuitEvent)
@@ -98,6 +96,7 @@ import SG.Constants
 import SG.Font
 import SG.LoopData
 import SG.Math
+import SG.SimpleLevel
 import SG.Starfield
 import SG.TextureCache
 import SG.Time
@@ -287,75 +286,12 @@ shoot = do
             }
         , ImageComponent (StillImage laserImage))
 
-simpleLevel :: Level
-simpleLevel =
-  [ Spawn
-      { _spawnTimeDiff = 2000 :: Millisecond
-      , _spawnType =
-          SpawnTypeHint
-            (TextDescriptor
-               { _rtFontDescriptor = hudFont
-               , _rtColor = hintTextColor
-               , _rtText = "use [W A S D] to move around"
-               })
-      }
-  , Spawn
-      { _spawnTimeDiff = 3000 :: Millisecond
-      , _spawnType =
-          SpawnTypeMeteor
-            meteorGreyBig1
-            (V2 440 (fromIntegral (meteorGreyBig1 ^. meteorSize . _y . negated)))
-      }
-  , Spawn
-      { _spawnTimeDiff = 4000 :: Millisecond
-      , _spawnType =
-          SpawnTypeMeteor
-            meteorBrownBig1
-            (V2
-               600
-               (fromIntegral (meteorBrownBig1 ^. meteorSize . _y . negated)))
-      }
-  , Spawn
-      { _spawnTimeDiff = 5000 :: Millisecond
-      , _spawnType =
-          SpawnTypeMeteor
-            meteorGreyBig2
-            (V2 100 (fromIntegral (meteorGreyBig2 ^. meteorSize . _y . negated)))
-      }
-  , Spawn
-      { _spawnTimeDiff = 6000 :: Millisecond
-      , _spawnType =
-          SpawnTypeMeteor
-            meteorGreyBig3
-            (V2 800 (fromIntegral (meteorGreyBig3 ^. meteorSize . _y . negated)))
-      }
-  , Spawn
-      { _spawnTimeDiff = 11000 :: Millisecond
-      , _spawnType =
-          SpawnTypeHint
-            (TextDescriptor
-               { _rtFontDescriptor = hudFont
-               , _rtColor = hintTextColor
-               , _rtText = "use [SPACE] to shoot - watch your energy!"
-               })
-      }
-  , Spawn
-      { _spawnTimeDiff = 12000 :: Millisecond
-      , _spawnType =
-          SpawnTypeMeteor
-            meteorBrownMed1
-            (V2
-               500
-               (fromIntegral (meteorBrownMed1 ^. meteorSize . _y . negated)))
-      }
-  ]
-
 spawn :: Spawn -> GameSystem ()
 spawn (Spawn _ (SpawnTypeHint td)) = do
   now <- getNow
   let dur = 2000 :: Millisecond
   loopHint .= Just (Hint td dur (dur `addDuration` now))
-spawn (Spawn _ (SpawnTypeMeteor meteorType pos)) = do
+spawn (Spawn _ (SpawnTypeMeteor meteorType pos)) =
   newEntity'
     ( Target (meteorType ^. meteorRadius) (meteorType ^. meteorHealth)
     , BodyComponent $
@@ -366,7 +302,7 @@ spawn (Spawn _ (SpawnTypeMeteor meteorType pos)) = do
         , _bodyVelocity = meteorType ^. meteorVelocity
         , _bodyAngularVelocity = meteorType ^. meteorAngularVelocity
         }
-    , ImageComponent (StillImage (traceShowId $ meteorType ^. meteorImage)))
+    , ImageComponent (StillImage (meteorType ^. meteorImage)))
 
 spawnEnemies :: GameSystem ()
 spawnEnemies = do
