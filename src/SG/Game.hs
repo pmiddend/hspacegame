@@ -48,7 +48,6 @@ import Data.Time.Units
   , convertUnit
   , toMicroseconds
   )
-import Debug.Trace (traceShowId)
 import Linear.V2 (V2(V2), _x, _y)
 import Linear.Vector ((*^), (^/))
 import Numeric.Lens (negated)
@@ -338,11 +337,12 @@ handleCollisions =
                   , _bodyVelocity = V2 0 0
                   , _bodyAngularVelocity = Radians 0
                   })
-            -- TODO: Add rng layer, modify lifetime, velocity, count, image, angular velocity
             replicateM_ 10 (spawnMeteorParticle' now (bdT ^. bodyCenter))
             playChunk explosionSoundPath
             loopScore += 1
-          else set etyT (Target tr newHealth)
+          else do
+            playChunk collisionSoundPath
+            set etyT (Target tr newHealth)
 
 deleteRetirees :: GameSystem ()
 deleteRetirees = do

@@ -72,6 +72,9 @@ pewPath = basePath </> "Bonus" </> "sfx_laser1.wav"
 explosionSoundPath :: FilePath
 explosionSoundPath = basePath </> "explosion-short.wav"
 
+collisionSoundPath :: FilePath
+collisionSoundPath = basePath </> "collision.wav"
+
 playerImage :: ImageIdentifier
 playerImage = ImageIdentifier mainAtlasPath "playerShip1_blue.png"
 
