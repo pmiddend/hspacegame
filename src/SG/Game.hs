@@ -27,8 +27,10 @@ import Control.Lens
   , (+~)
   , (-=)
   , (.=)
+  , (.~)
   , (^.)
   , (^?!)
+  , _4
   , ix
   , to
   , use
@@ -49,6 +51,7 @@ import Data.Time.Units
   , convertUnit
   , toMicroseconds
   )
+import Debug.Trace (traceShowId)
 import Linear.V2 (V2(V2), _x, _y)
 import Linear.Vector ((*^), (^/))
 import Numeric.Lens (negated)
@@ -194,7 +197,7 @@ updatePlayerVelocity timeDelta pk v =
                           getter playerFriction
    in applicate updatePlayerVelocity' v
 
-inBounds :: Body -> Bool
+inBounds :: BodyComponent -> Bool
 inBounds b =
   let largerRect = rectEmbiggen 1.5 (fromIntegral <$> gameRect)
    in rectIntersect largerRect (b ^. bodyRectangle)
@@ -202,7 +205,7 @@ inBounds b =
 updateBodies :: GameSystem ()
 updateBodies = do
   timeDelta <- use loopDelta
-  cmapM $ \(b@Body {}, ety) -> do
+  cmapM $ \(b@BodyComponent {}, ety) -> do
     unless (inBounds b) (destroy ety (Proxy @AllComponents))
     pure
       (b & bodyData . bodyPosition +~ timeDelta *^
@@ -232,10 +235,10 @@ spawnMeteorParticle' now center = do
   let velocity = velocitySignum * velocityAmount
   angularVelocity <- randomNormal 0 5
   newEntity'
-    ( Lifetime lifetime (lifetime `addDuration` now)
+    ( Lifetime lifetime (lifetime `addDuration` now) (Just (LinearFromTo 1 0))
     , ImageComponent (StillImage meteorParticleImage)
-    , EntityColor (V4 255 255 255 255)
-    , Body $
+    , ColorComponent (V4 255 255 255 255)
+    , BodyComponent $
       BodyData
         { _bodyPosition = center - (floatV2 (V2 size size) ^/ 2.0)
         , _bodySize = V2 size size
@@ -248,7 +251,7 @@ initEcs :: GameSystem ()
 initEcs = do
   p <-
     newEntity
-      ( Body $
+      ( BodyComponent $
         BodyData
           { _bodyPosition =
               (floatV2 gameSize ^/ 2.0) - floatV2 playerSize ^/ 2.0
@@ -265,12 +268,12 @@ shoot = do
   currentEnergy <- use loopCurrentEnergy
   when (currentEnergy > laserEnergy) $ do
     loopCurrentEnergy -= laserEnergy
-    Body bd <- use loopPlayer >>= get
+    BodyComponent bd <- use loopPlayer >>= get
     playChunk pewPath
     void $
       newEntity
         ( Bullet laserRadius laserDamage
-        , Body $
+        , BodyComponent $
           BodyData
             { _bodyPosition =
                 V2
@@ -287,20 +290,40 @@ shoot = do
 simpleLevel :: Level
 simpleLevel =
   [ Spawn
-      { _spawnTimeDiff = 5000 :: Millisecond
-      , _spawnType = SpawnTypeAsteroidMedium
-      , _spawnPosition =
-          V2 500 (fromIntegral (asteroidMediumSize ^. _y . negated))
+      { _spawnTimeDiff = 2000 :: Millisecond
+      , _spawnType =
+          SpawnTypeHint
+            (TextDescriptor
+               { _rtFontDescriptor = hudFont
+               , _rtColor = hintTextColor
+               , _rtText = "use [W A S D] to move around"
+               })
+      }
+  , Spawn
+      { _spawnTimeDiff = 10000 :: Millisecond
+      , _spawnType =
+          SpawnTypeAsteroidMedium
+            (V2 500 (fromIntegral (asteroidMediumSize ^. _y . negated)))
+      }
+  , Spawn
+      { _spawnTimeDiff = 20000 :: Millisecond
+      , _spawnType =
+          SpawnTypeAsteroidMedium
+            (V2 500 (fromIntegral (asteroidMediumSize ^. _y . negated)))
       }
   ]
 
 spawn :: Spawn -> GameSystem ()
-spawn s =
+spawn (Spawn _ (SpawnTypeHint td)) = do
+  now <- getNow
+  let dur = 2000 :: Millisecond
+  loopHint .= Just (Hint td dur (dur `addDuration` now))
+spawn (Spawn _ (SpawnTypeAsteroidMedium pos)) =
   newEntity'
     ( Target asteroidMediumRadius asteroidMediumHealth
-    , Body $
+    , BodyComponent $
       BodyData
-        { _bodyPosition = s ^. spawnPosition
+        { _bodyPosition = pos
         , _bodySize = asteroidMediumSize
         , _bodyAngle = Radians 0
         , _bodyVelocity = asteroidVelocity
@@ -322,16 +345,16 @@ spawnEnemies = do
 
 handleCollisions :: GameSystem ()
 handleCollisions = do
-  Body pb <- use loopPlayer >>= get
-  cmapM_ $ \(Target tr _, Body bdT) ->
+  BodyComponent pb <- use loopPlayer >>= get
+  cmapM_ $ \(Target tr _, BodyComponent bdT) ->
     when
       (circlesIntersect
          (Circle (bdT ^. bodyCenter) tr)
          (Circle (pb ^. bodyCenter) playerRadius)) $ do
       loopGameState .= GameStateOver
       playChunk gameOverSoundPath
-  cmapM_ $ \(Target tr th, Body bdT, etyT) ->
-    cmapM_ $ \(Bullet br bd, Body bdB, etyB) ->
+  cmapM_ $ \(Target tr th, BodyComponent bdT, etyT) ->
+    cmapM_ $ \(Bullet br bd, BodyComponent bdB, etyB) ->
       when
         (circlesIntersect
            (Circle (bdT ^. bodyCenter) tr)
@@ -345,8 +368,11 @@ handleCollisions = do
             let explosionDuration = explosionAnimation ^. aiTotalDuration
             newEntity'
               ( ImageComponent (DynamicImage (Animation explosionAnimation now))
-              , Lifetime explosionDuration (explosionDuration `addDuration` now)
-              , Body $
+              , Lifetime
+                  explosionDuration
+                  (explosionDuration `addDuration` now)
+                  (Just (LinearFromTo 1 0))
+              , BodyComponent $
                 BodyData
                   { _bodyPosition =
                       bdT ^. bodyCenter - floatV2 explosionSize ^/ 2.0
@@ -362,19 +388,47 @@ handleCollisions = do
             playChunk collisionSoundPath
             set etyT (Target tr newHealth)
 
+calculateRamp :: TimePoint -> TimePoint -> Millisecond -> Maybe Ramp -> Double
+calculateRamp now end _ Nothing =
+  if now > end
+    then -1
+    else 1
+calculateRamp now end dur (Just (LinearFromTo from' to')) =
+  if now > end
+    then -1
+    else let t =
+               1 - fromIntegral @Millisecond @Double (end `timeDiff` now) /
+               fromIntegral dur
+          in lerp from' to' t
+calculateRamp now end dur (Just (UpThenDown upDur downDur from' to')) =
+  if now > end
+    then -1
+    else let t =
+               1 - fromIntegral @Millisecond @Double (end `timeDiff` now) /
+               fromIntegral dur
+          in if t < upDur
+               then lerp from' to' (t / upDur)
+               else if t > (1 - downDur)
+                      then lerp from' to' ((1 - t) / downDur)
+                      else to'
+
 deleteRetirees :: GameSystem ()
 deleteRetirees = do
   now <- getNow
-  cmapM_ $ \(Lifetime duration ltEnd, ety) -> do
-    let lifetimePercent =
-          fromIntegral @Millisecond @Double (ltEnd `timeDiff` now) /
-          fromIntegral @Millisecond @Double duration
+  cmapM_ $ \(Lifetime duration ltEnd ramp, ety) -> do
+    let lifetimePercent = calculateRamp now ltEnd duration ramp
     if lifetimePercent <= 0
       then destroyEntity ety
-      else let modColor (Just (EntityColor (V4 r g b _))) =
-                 Just (EntityColor (V4 r g b (round (lifetimePercent * 255))))
+      else let modColor (Just (ColorComponent (V4 r g b _))) =
+                 Just
+                   (ColorComponent (V4 r g b (round (lifetimePercent * 255))))
                modColor Nothing = Nothing
             in modify ety modColor
+
+updateHint :: GameSystem ()
+updateHint = do
+  now <- getNow
+  loopHint %= filterMaybe ((> now) . view hintEnd)
 
 mainLoop :: GameSystem ()
 mainLoop = do
@@ -400,6 +454,7 @@ mainLoop = do
       loopDelta .= timeDiffSecs
       delta <- use loopDelta
       loopStarfield %= stepStarfield delta
+      updateHint
       mainLoop
 
 updatePlayer :: GameSystem ()
@@ -407,8 +462,8 @@ updatePlayer = do
   timeDelta <- use loopDelta
   keys <- use loopPlayerKeys
   pe <- use loopPlayer
-  modify pe $ \(Body b) ->
-    Body (b & bodyVelocity %~ updatePlayerVelocity timeDelta keys)
+  modify pe $ \(BodyComponent b) ->
+    BodyComponent (b & bodyVelocity %~ updatePlayerVelocity timeDelta keys)
 
 determineAnimFrame :: TimePoint -> Animation -> Int
 determineAnimFrame now anim =
@@ -459,17 +514,17 @@ fillRectColor r c = do
     (Just c)
     (fillRect renderer (Just (r ^. to (fromIntegral <$>) . sdlRect)))
 
-loadTextCached' :: RenderedText -> GameSystem SizedTexture
+loadTextCached' :: TextDescriptor -> GameSystem SizedTexture
 loadTextCached' rt = do
   fontCache <- use loopFontCache
   renderer <- use loopRenderer
   textCache <- use loopTextCache
   loadTextCached renderer fontCache textCache rt
 
-textSize :: RenderedText -> GameSystem (V2 Int)
+textSize :: TextDescriptor -> GameSystem (V2 Int)
 textSize rt = view stSize <$> loadTextCached' rt
 
-drawText :: V2 Int -> RenderedText -> GameSystem ()
+drawText :: V2 Int -> TextDescriptor -> GameSystem ()
 drawText position rt = do
   st <- loadTextCached' rt
   renderer <- use loopRenderer
@@ -498,7 +553,7 @@ drawScore :: GameSystem ()
 drawScore = do
   currentScore <- use (loopScore . score)
   let label =
-        RenderedText
+        TextDescriptor
           { _rtFontDescriptor = hudFont
           , _rtColor = V4 200 200 200 255
           , _rtText = "Score: " <> textShow currentScore
@@ -508,17 +563,23 @@ drawScore = do
     (V2 (gameSize ^. _x - labelSize ^. _x - hudMargin ^. _x) (hudMargin ^. _y))
     label
 
-drawCentered :: RenderedText -> GameSystem ()
-drawCentered label = do
+drawCenteredIn :: Rectangle Int -> TextDescriptor -> GameSystem ()
+drawCenteredIn r label = do
   labelSize <- textSize label
   drawText
-    (round <$> (floatV2 @Int @Double gameSize ^/ 2 - floatV2 labelSize ^/ 2))
+    (round <$>
+     (floatV2 (r ^. rectPos) + (r ^. rectSize . floatingV2) ^/ 2 -
+      floatV2 @Int @Double labelSize ^/
+      2))
     label
+
+drawCentered :: TextDescriptor -> GameSystem ()
+drawCentered = drawCenteredIn gameRect
 
 drawEnergy :: GameSystem ()
 drawEnergy = do
   let label =
-        RenderedText
+        TextDescriptor
           { _rtFontDescriptor = hudFont
           , _rtColor = V4 255 255 255 255
           , _rtText = "Energy:"
@@ -566,7 +627,7 @@ draw = do
            SizedTexture
         -> Rectangle Int
         -> BodyData
-        -> Maybe EntityColor
+        -> Maybe ColorComponent
         -> GameSystem ()
       drawBody tex atlasRect bd color =
         withNewTextureColor (view entityColor <$> color) (tex ^. stTexture) $
@@ -582,7 +643,7 @@ draw = do
           (bd ^. bodyAngle . degrees . getDegrees . to realToFrac)
           Nothing
           (V2 False False)
-  cmapM_ $ \(Body bd, ImageComponent i, color) ->
+  cmapM_ $ \(BodyComponent bd, ImageComponent i, color) ->
     case i of
       StillImage (ImageIdentifier atlasPath atlasName) -> do
         foundAtlas <- loadAtlasCached atlasCache atlasPath
@@ -603,14 +664,39 @@ draw = do
           color
   drawEnergy
   drawScore
+  drawHint
   whenGameOver $
     drawCentered
-      (RenderedText
+      (TextDescriptor
          { _rtFontDescriptor = announceFont
          , _rtColor = V4 255 255 255 255
          , _rtText = "Game Over"
          })
   liftIO (present renderer)
+
+drawHint :: GameSystem ()
+drawHint = do
+  h <- use loopHint
+  now <- getNow
+  for_ h $ \hint -> do
+    let height = (gameSize ^. _y) `div` 5
+        hintRect :: Rectangle Int
+        hintRect =
+          Rectangle
+            (V2 0 ((gameSize ^. _y) - height))
+            (V2 (gameSize ^. _x) height)
+        (V4 r g b _) = hintBackgroundColor
+        ma =
+          round
+            @Double
+            (calculateRamp
+               now
+               (hint ^. hintEnd)
+               (hint ^. hintDuration)
+               (Just (UpThenDown 0.2 0.2 0 255)))
+        modulatedColor = V4 r g b ma
+    fillRectColor hintRect modulatedColor
+    drawCenteredIn hintRect (hint ^. hintText & rtColor . _4 .~ ma)
 
 gameMain :: IO ()
 gameMain =
@@ -648,5 +734,6 @@ gameMain =
                         , _loopMaxEnergy = initialMaxEnergy
                         , _loopGameState = GameStateRunning
                         , _loopPlayer = Entity (-1)
+                        , _loopHint = Nothing
                         }
                 runLoop initialLoopData (runWith w (initEcs >> mainLoop))

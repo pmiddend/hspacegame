@@ -1,16 +1,13 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module SG.Font where
 
 import Control.Exception.Lifted (bracket)
-import Control.Lens ((^.), (^..), _2, folded, makeLenses, to, view)
+import Control.Lens ((^.), (^..), _2, folded, to, view)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Cache.LRU (LRU, insertInforming, lookup, newLRU, toList)
 import Data.Foldable (for_)
 import Data.IORef (IORef)
-import Data.Text (Text)
 import Prelude hiding (lookup)
-import SDL.Font (Font, PointSize, blended, free, load)
+import SDL.Font (blended, free, load)
 import SDL.Video (Renderer)
 import SDL.Video.Renderer
   ( createTextureFromSurface
@@ -20,24 +17,7 @@ import SDL.Video.Renderer
 import SG.Cache (Cache, destroyCache, initCache, loadCached)
 import SG.IORefLifted
 import SG.TextureCache (SizedTexture(SizedTexture), stTexture, textureSize)
-import SG.Types (Color)
-
-data FontDescriptor =
-  FontDescriptor
-    { _fdFont :: FilePath
-    , _fdSize :: PointSize
-    }
-  deriving (Ord, Eq, Show)
-
-makeLenses ''FontDescriptor
-
-data SizedFont =
-  SizedFont
-    { _sfFont :: Font
-    , _sfSize :: PointSize
-    }
-
-makeLenses ''SizedFont
+import SG.Types
 
 type FontCache = Cache FontDescriptor SizedFont
 
@@ -58,17 +38,7 @@ destroyFontCache = destroyCache
 loadFontCached :: MonadIO m => FontCache -> FontDescriptor -> m SizedFont
 loadFontCached = loadCached
 
-data RenderedText =
-  RenderedText
-    { _rtFontDescriptor :: FontDescriptor
-    , _rtColor :: Color
-    , _rtText :: Text
-    }
-  deriving (Eq, Show, Ord)
-
-makeLenses ''RenderedText
-
-type TextCache = IORef (LRU RenderedText SizedTexture)
+type TextCache = IORef (LRU TextDescriptor SizedTexture)
 
 initTextCache :: MonadIO m => m TextCache
 initTextCache = newIORef (newLRU (Just 32))
@@ -83,7 +53,7 @@ loadTextCached ::
   => Renderer
   -> FontCache
   -> TextCache
-  -> RenderedText
+  -> TextDescriptor
   -> m SizedTexture
 loadTextCached renderer fontCache textCacheRef rt = do
   textCache <- readIORef textCacheRef

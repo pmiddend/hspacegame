@@ -54,6 +54,7 @@ data LoopData =
     , _loopMaxEnergy :: Energy
     , _loopGameState :: GameState
     , _loopPlayer :: Entity
+    , _loopHint :: Maybe Hint
     }
 
 makeLenses ''LoopData

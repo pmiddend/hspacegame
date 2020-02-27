@@ -4,7 +4,7 @@ module SG.Constants where
 
 import Data.Time.Units (Millisecond)
 import Linear.V2 (V2(V2))
-import SG.Font
+import SDL.Vect (V4(V4))
 import SG.Math
 import SG.Types
 import System.FilePath ((</>))
@@ -132,3 +132,9 @@ hudMargin = V2 5 5
 
 playerRadius :: Double
 playerRadius = 14.0
+
+hintBackgroundColor :: Color
+hintBackgroundColor = V4 64 64 64 128
+
+hintTextColor :: Color
+hintTextColor = V4 255 255 255 255
