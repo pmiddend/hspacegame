@@ -29,6 +29,8 @@ import System.Clock
   , toNanoSecs
   )
 
+type Color = V4 Word8
+
 data BodyData =
   BodyData
     { _bodyPosition :: V2 Double
@@ -142,9 +144,10 @@ makeLenses ''Bullet
 instance Component Bullet where
   type Storage Bullet = Map Bullet
 
-newtype Lifetime =
+data Lifetime =
   Lifetime
-    { _lifetimeEnd :: TimePoint
+    { _lifetimeTotal :: Millisecond
+    , _lifetimeEnd :: TimePoint
     }
   deriving (Show)
 
@@ -160,9 +163,28 @@ data Player =
 instance Component Player where
   type Storage Player = Unique Player
 
+newtype EntityColor =
+  EntityColor
+    { _entityColor :: Color
+    }
+  deriving (Show)
+
+makeLenses ''EntityColor
+
+instance Component EntityColor where
+  type Storage EntityColor = Map EntityColor
+
 makeWorld
   "World"
-  [''Body, ''Player, ''Target, ''Bullet, ''Image, ''Animation, ''Lifetime]
+  [ ''Body
+  , ''Player
+  , ''Target
+  , ''Bullet
+  , ''Image
+  , ''Animation
+  , ''Lifetime
+  , ''EntityColor
+  ]
 
 type AllComponents = (Body, Player, Target, Bullet, Image, Animation)
 
@@ -215,5 +237,3 @@ newtype Energy =
     { _energy :: Double
     }
   deriving (Num, Enum, Ord, Eq, Real, RealFrac, Fractional, Floating, RealFloat)
-
-type Color = V4 Word8

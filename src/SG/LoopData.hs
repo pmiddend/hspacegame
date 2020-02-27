@@ -29,6 +29,7 @@ import SG.Font
 import SG.Starfield
 import SG.TextureCache
 import SG.Types
+import System.Random (StdGen)
 
 type PlayerKeys = V2 Int
 
@@ -40,6 +41,7 @@ data LoopData =
     , _loopRenderer :: Renderer
     , _loopTextCache :: TextCache
     , _loopFontCache :: FontCache
+    , _loopRng :: StdGen
     , _loopDelta :: Double
     , _loopWorld :: World
     , _loopStarfield :: Starfield

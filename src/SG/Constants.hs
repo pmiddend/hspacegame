@@ -84,6 +84,15 @@ asteroidMediumImage = ImageIdentifier mainAtlasPath "meteorBrown_med1.png"
 explosionSize :: V2 Int
 explosionSize = V2 100 100
 
+meteorParticleLifetime :: Millisecond
+meteorParticleLifetime = 1000
+
+meteorParticleSize :: V2 Int
+meteorParticleSize = V2 16 16
+
+meteorParticleImage :: ImageIdentifier
+meteorParticleImage = ImageIdentifier mainAtlasPath "meteorBrown_tiny1.png"
+
 explosionAnimation :: AnimationIdentifier
 explosionAnimation =
   AnimationIdentifier

@@ -5,7 +5,17 @@
 
 module SG.Game where
 
-import Apecs (Set, cmap, cmapM, cmapM_, destroy, newEntity, runWith, set)
+import Apecs
+  ( Set
+  , cmap
+  , cmapM
+  , cmapM_
+  , destroy
+  , modify
+  , newEntity
+  , runWith
+  , set
+  )
 import Control.Arrow ((***))
 import Control.Exception (bracket, bracket_)
 import Control.Lens
@@ -23,11 +33,13 @@ import Control.Lens
   , use
   , view
   )
-import Control.Monad (unless, void, when)
+import Control.Monad (replicateM_, unless, void, when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Default.Class (def)
 import Data.Foldable (fold, for_)
+import Data.Maybe (fromMaybe)
 import Data.Proxy
+import Data.Random.Normal (normal')
 import Data.StateVar (($=), get)
 import Data.Time.Units
   ( Microsecond
@@ -36,6 +48,7 @@ import Data.Time.Units
   , convertUnit
   , toMicroseconds
   )
+import Debug.Trace (traceShowId)
 import Linear.V2 (V2(V2), _x, _y)
 import Linear.Vector ((*^), (^/))
 import Numeric.Lens (negated)
@@ -52,7 +65,7 @@ import SDL.Init (InitFlag(InitAudio, InitVideo), initialize, quit)
 import SDL.Input.Keyboard (Keysym(Keysym))
 import qualified SDL.Input.Keyboard.Codes as KC
 import SDL.Mixer (withAudio)
-import SDL.Vect (V4(V4))
+import SDL.Vect (V3(V3), V4(V4))
 import SDL.Video
   ( RendererConfig
   , WindowConfig(windowInitialSize, windowResizable)
@@ -64,7 +77,18 @@ import SDL.Video
   , destroyWindow
   , rendererLogicalSize
   )
-import SDL.Video.Renderer (clear, copyEx, fillRect, present, rendererDrawColor)
+import SDL.Video.Renderer
+  ( BlendMode(..)
+  , Texture
+  , clear
+  , copyEx
+  , fillRect
+  , present
+  , rendererDrawBlendMode
+  , rendererDrawColor
+  , textureAlphaMod
+  , textureColorMod
+  )
 import SG.Atlas
 import SG.ChunkCache
 import SG.Constants
@@ -75,7 +99,7 @@ import SG.Starfield
 import SG.TextureCache
 import SG.Types
 import SG.Util
-import System.Random (mkStdGen)
+import System.Random (Random, mkStdGen, randomR)
 
 windowConfig :: WindowConfig
 windowConfig =
@@ -179,6 +203,36 @@ updateBodies = do
 newEntity' :: (Set World LoopState c) => c -> GameSystem ()
 newEntity' xs = void $ newEntity xs
 
+randomPair :: (a, a) -> GameSystem a
+randomPair (x, y) = do
+  index <- randomUniform @Int 0 1
+  if index == 0
+    then pure x
+    else pure y
+
+spawnMeteorParticle' :: TimePoint -> V2 Double -> GameSystem ()
+spawnMeteorParticle' now center = do
+  lifetime <-
+    fromIntegral @Int @Millisecond . round @Double @Int <$>
+    randomNormal 500 1500
+  size <- randomUniform 8 80
+  velocitySignum <- V2 <$> randomPair (-1, 1) <*> randomPair (-1, 1)
+  velocityAmount <- V2 <$> randomUniform 10 300 <*> randomUniform 10 300
+  let velocity = velocitySignum * velocityAmount
+  angularVelocity <- randomNormal 0 5
+  newEntity'
+    ( Lifetime lifetime (lifetime ~^ now)
+    , Image meteorParticleImage
+    , EntityColor (V4 255 255 255 255)
+    , Body $
+      BodyData
+        { _bodyPosition = center - ((fromIntegral <$> V2 size size) ^/ 2.0)
+        , _bodySize = V2 size size
+        , _bodyAngle = Radians 0
+        , _bodyVelocity = velocity
+        , _bodyAngularVelocity = Radians angularVelocity
+        })
+
 initEcs :: GameSystem ()
 initEcs =
   newEntity'
@@ -270,9 +324,10 @@ handleCollisions =
           then do
             destroy etyT (Proxy @AllComponents)
             now <- getNow
+            let explosionDuration = explosionAnimation ^. aiTotalDuration
             newEntity'
               ( Animation explosionAnimation now
-              , Lifetime ((explosionAnimation ^. aiTotalDuration) ~^ now)
+              , Lifetime explosionDuration (explosionDuration ~^ now)
               , Body $
                 BodyData
                   { _bodyPosition =
@@ -283,6 +338,8 @@ handleCollisions =
                   , _bodyVelocity = V2 0 0
                   , _bodyAngularVelocity = Radians 0
                   })
+            -- TODO: Add rng layer, modify lifetime, velocity, count, image, angular velocity
+            replicateM_ 10 (spawnMeteorParticle' now (bdT ^. bodyCenter))
             playChunk explosionSoundPath
             loopScore += 1
           else set etyT (Target tr newHealth)
@@ -290,7 +347,16 @@ handleCollisions =
 deleteRetirees :: GameSystem ()
 deleteRetirees = do
   now <- getNow
-  cmapM_ $ \(Lifetime ltEnd, ety) -> when (now > ltEnd) (destroyEntity ety)
+  cmapM_ $ \(Lifetime duration ltEnd, ety) -> do
+    let lifetimePercent =
+          fromIntegral @Millisecond @Double (ltEnd `timeDiff` now) /
+          fromIntegral @Millisecond @Double duration
+    if lifetimePercent <= 0
+      then destroyEntity ety
+      else let modColor (Just (EntityColor (V4 r g b _))) =
+                 Just (EntityColor (V4 r g b (round (lifetimePercent * 255))))
+               modColor Nothing = Nothing
+            in modify ety modColor
 
 mainLoop :: GameSystem ()
 mainLoop = do
@@ -341,14 +407,37 @@ determineAnimRect frame anim texture =
       (row, column) = frame `divMod` perRow
    in Rectangle (V2 column row * frameSize) frameSize
 
-fillRectColor :: Rectangle Int -> Color -> GameSystem ()
-fillRectColor r c = do
+withNewTextureColor :: Maybe Color -> Texture -> GameSystem a -> GameSystem a
+withNewTextureColor c t f = do
+  let V4 r g b a = fromMaybe (V4 255 255 255 255) c
+  let texColorMod = textureColorMod t
+      texAlphaMod = textureAlphaMod t
+  colorBefore <- get texColorMod
+  alphaBefore <- get texAlphaMod
+  texColorMod $= V3 r g b
+  texAlphaMod $= a
+  result <- f
+  texColorMod $= colorBefore
+  texAlphaMod $= alphaBefore
+  pure result
+
+withNewDrawColor :: Maybe Color -> GameSystem a -> GameSystem a
+withNewDrawColor c f = do
+  let realColor = fromMaybe (V4 255 255 255 255) c
   renderer <- use loopRenderer
   let drawColor = rendererDrawColor renderer
   colorBefore <- get drawColor
-  drawColor $= c
-  fillRect renderer (Just (r ^. to (fromIntegral <$>) . sdlRect))
+  drawColor $= realColor
+  result <- f
   drawColor $= colorBefore
+  pure result
+
+fillRectColor :: Rectangle Int -> Color -> GameSystem ()
+fillRectColor r c = do
+  renderer <- use loopRenderer
+  withNewDrawColor
+    (Just c)
+    (fillRect renderer (Just (r ^. to (fromIntegral <$>) . sdlRect)))
 
 loadTextCached' :: RenderedText -> GameSystem SizedTexture
 loadTextCached' rt = do
@@ -372,6 +461,18 @@ drawText position rt = do
     0
     Nothing
     (V2 False False)
+
+randomUniform :: (Random a) => a -> a -> GameSystem a
+randomUniform a b = do
+  (v, rng') <- randomR (a, b) <$> use loopRng
+  loopRng .= rng'
+  pure v
+
+randomNormal :: (Random a, Floating a) => a -> a -> GameSystem a
+randomNormal mean stddev = do
+  (v, rng') <- normal' (mean, stddev) <$> use loopRng
+  loopRng .= rng'
+  pure v
 
 drawScore :: GameSystem ()
 drawScore = do
@@ -434,7 +535,14 @@ draw = do
   starfield <- use loopStarfield
   drawStarfield renderer atlasCache starfield
   now <- getNow
-  let drawBody tex atlasRect bd =
+  let drawBody ::
+           SizedTexture
+        -> Rectangle Int
+        -> BodyData
+        -> Maybe EntityColor
+        -> GameSystem ()
+      drawBody tex atlasRect bd color =
+        withNewTextureColor (view entityColor <$> color) (tex ^. stTexture) $
         copyEx
           renderer
           (tex ^. stTexture)
@@ -447,19 +555,21 @@ draw = do
           (bd ^. bodyAngle . degrees . getDegrees . to realToFrac)
           Nothing
           (V2 False False)
-  cmapM_ $ \(Body bd, a@Animation {}) -> do
+  cmapM_ $ \(Body bd, a@Animation {}, color) -> do
     animationTexture <-
       loadTextureCached textureCache (a ^. animationIdentifier . aiAtlasPath)
     drawBody
       animationTexture
       (determineAnimRect (determineAnimFrame now a) a animationTexture)
       bd
-  cmapM_ $ \(Body bd, Image (ImageIdentifier atlasPath atlasName)) -> do
+      color
+  cmapM_ $ \(Body bd, Image (ImageIdentifier atlasPath atlasName), color) -> do
     foundAtlas <- loadAtlasCached atlasCache atlasPath
     drawBody
       (foundAtlas ^. atlasTexture)
       (foundAtlas ^?! atlasFrames . ix atlasName)
       bd
+      color
   drawEnergy
   drawScore
   liftIO (present renderer)
@@ -476,6 +586,7 @@ gameMain =
             bracket initTextCache destroyTextCache $ \textCache ->
               withAudio def 1024 $ bracket initChunkCache destroyChunkCache $ \chunkCache -> do
                 rendererLogicalSize renderer $= Just (fromIntegral <$> gameSize)
+                rendererDrawBlendMode renderer $= BlendAlphaBlend
                 w <- initWorld
                 gameStart <- getNow
                 let initialLoopData =
@@ -484,6 +595,7 @@ gameMain =
                         , _loopAtlasCache = atlasCache
                         , _loopChunkCache = chunkCache
                         , _loopRenderer = renderer
+                        , _loopRng = mkStdGen 0
                         , _loopTextCache = textCache
                         , _loopFontCache = fontCache
                         , _loopDelta = 0
