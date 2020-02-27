@@ -31,7 +31,7 @@ asteroidMediumSize :: V2 Int
 asteroidMediumSize = V2 42 42
 
 asteroidMediumRadius :: Double
-asteroidMediumRadius = 38.0
+asteroidMediumRadius = 18.0
 
 asteroidMediumHealth :: Health
 asteroidMediumHealth = 100
@@ -49,7 +49,7 @@ laserSize :: V2 Int
 laserSize = V2 4 26
 
 laserRadius :: Double
-laserRadius = 24.0
+laserRadius = 13.0
 
 laserSpeed :: V2 Double
 laserSpeed = V2 0 (-300)
@@ -131,4 +131,4 @@ hudMargin :: V2 Int
 hudMargin = V2 5 5
 
 playerRadius :: Double
-playerRadius = 32.0
+playerRadius = 14.0
